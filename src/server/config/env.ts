@@ -48,6 +48,20 @@ const envSchema = z.object({
   LLM_MODEL_CHEAP: z.string().default('gemini-2.5-flash'),
   LLM_MODEL_SMART: z.string().default('gemini-2.5-pro'),
 
+  // Fotos analisadas em paralelo. Baixo de propósito: rajada grande dispara
+  // rate limit, e o retry sai mais caro que a espera.
+  VISION_CONCURRENCY: positiveNumber(3),
+  VISION_TIMEOUT_MS: positiveNumber(45_000),
+  VISION_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  VISION_CACHE_TTL_DAYS: positiveNumber(30),
+
+  /**
+   * Tabela de preços por modelo, em JSON. Sem ela, o sistema registra os
+   * tokens reais mas informa custo desconhecido — nunca um valor inventado.
+   * Formato: {"gemini-2.5-flash":{"inputPerMillion":0.1,"outputPerMillion":0.4}}
+   */
+  MODEL_PRICING_JSON: z.string().optional(),
+
   STORAGE_PROVIDER: z.enum(['LOCAL', 'S3']).default('LOCAL'),
   STORAGE_LOCAL_DIR: z.string().default('./storage'),
 

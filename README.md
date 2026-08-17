@@ -5,8 +5,8 @@ recebe dados de um anúncio (Airbnb, Booking.com) e a exportação de pricing do
 PriceLabs, e devolve scores, diagnóstico e recomendações priorizadas por
 impacto.
 
-> **Estado atual: Etapas 0 a 2 concluídas.** O módulo de pricing está
-> funcional de ponta a ponta. Fotos, anúncios e recomendações têm os contratos
+> **Estado atual: Etapas 0 a 3 concluídas.** Pricing e análise de fotos estão
+> funcionais de ponta a ponta. Anúncios e recomendações têm os contratos
 > prontos, mas ainda não têm implementação — ver [Roadmap](#roadmap).
 
 ---
@@ -48,7 +48,8 @@ O seed cria a configuração de scoring `v1` e, fora de produção, o usuário
 | Comando | O que faz |
 |---|---|
 | `npm run dev` | Servidor de desenvolvimento |
-| `npm test` | Testes (Vitest) |
+| `npm test` | Testes unitários (Vitest) |
+| `npm run test:live` | Testes de integração — banco real e APIs externas |
 | `npm run typecheck` | `prisma generate` + `tsc --noEmit` |
 | `npm run build` | Build de produção |
 | `npm run db:migrate` | Cria e aplica migrations |
@@ -116,8 +117,9 @@ apenas exibe.
 | **Airbnb** | Sem implementação; contrato pronto | `RealAirbnbProvider` + `AIRBNB_PROVIDER` |
 | **Booking.com** | Sem implementação; contrato pronto | `RealBookingProvider` + `BOOKING_PROVIDER` |
 | **PriceLabs API** | `PriceLabsAPIProvider` lança `ProviderUnavailableError` | Implementar `load()` + `PRICING_PROVIDER=PRICELABS_API` |
-| **IA (visão/LLM)** | Contratos prontos, sem implementação | `GEMINI`/`ANTHROPIC`/`OPENAI` via env |
-| **Storage** | Contrato pronto | `LOCAL` → `S3` via env |
+| **Visão (fotos)** | ✅ `GeminiVisionProvider` real; `MockVisionProvider` como fallback | Adaptadores Claude/OpenAI via `VISION_PROVIDER` |
+| **LLM (texto)** | Contrato pronto, sem implementação | Etapa 5 |
+| **Storage** | ✅ `LocalStorageProvider` (disco) | `LOCAL` → `S3` via env |
 | **Concorrentes** | Coluna `isMock` no banco obriga rótulo na UI | Entrada manual ou fonte licenciada |
 
 ### Sobre scraping
@@ -131,6 +133,49 @@ Detalhes em [`src/server/core/providers/listing/README.md`](src/server/core/prov
 
 Nenhuma credencial no código. Tudo passa por `.env` e é validado no boot por
 `src/server/config/env.ts`, que falha com mensagem clara se faltar algo.
+
+A chave do Gemini precisa ser uma **API key da Generative Language API**
+(as do Google AI Studio, prefixo `AIza`). Tokens OAuth do Google Cloud, mesmo
+rotulados como "chave de API" no console, são recusados com
+`ACCESS_TOKEN_TYPE_UNSUPPORTED`.
+
+Sem `GEMINI_API_KEY`, o registry cai para o `MockVisionProvider` com um aviso
+no log — a aplicação continua funcionando, e o resultado vem marcado
+`provider: "mock"` para a interface poder rotular como simulado.
+
+---
+
+## Módulo de fotos (Etapa 3)
+
+### Fluxo
+
+1. **Validação** (`imageValidation.ts`) — formato conferido pelos *magic bytes*,
+   não pela extensão nem pelo `Content-Type`, que o cliente controla. Calcula o
+   sha256 usado como chave de cache.
+2. **Análise** (`ImageAnalysisService`) — uma chamada de IA por imagem, com
+   paralelismo limitado (padrão 3).
+3. **Score** (`photoScore.ts` + `insights.ts`) — determinístico, sem IA.
+
+### Garantias
+
+| Garantia | Como |
+|---|---|
+| Falha isolada | A falha de uma foto vira `PhotoAnalysisFailure`; o lote continua. Nenhuma exceção individual escapa do serviço |
+| Retry seletivo | Só erros `retryable` (429, 5xx, timeout) são retentados, com backoff exponencial. Imagem inválida falha na hora, sem gastar crédito |
+| Cache | Chave = sha256 + modelo + versão do prompt. Reenviar o mesmo álbum só cobra pelas fotos novas |
+| Orçamento | Ao atingir o teto, as fotos restantes falham com `BUDGET_EXCEEDED` em vez de estourar a conta |
+| Progresso | `onProgress` reporta "7/24" a cada foto, inclusive nas que falharam |
+
+### Custo
+
+`AIUsageLog` registra **tokens reais** de toda chamada, inclusive as que
+falharam — uma tentativa que consumiu entrada antes do timeout custou dinheiro,
+e omiti-la subestimaria o gasto.
+
+O **custo em dólar só é estimado se você configurar os preços** em
+`MODEL_PRICING_JSON`. Sem isso, o sistema reporta "custo desconhecido" em vez de
+exibir um número inventado: preços de fornecedor mudam e variam por região, e um
+valor chutado pareceria verdade no relatório do cliente.
 
 ---
 
@@ -173,10 +218,12 @@ descontos (10) e completude dos dados (10).
 
 ## Testes
 
-149 testes cobrindo as partes críticas:
+227 testes unitários, mais uma suíte de integração que roda contra
+serviços reais:
 
 ```bash
-npm test
+npm test        # unitários, sem rede
+npm run test:live   # banco real + APIs externas (pula o que não tem credencial)
 ```
 
 | Arquivo | Cobre |
@@ -191,6 +238,12 @@ npm test
 | `tests/scoring/buildScore.test.ts` | Média ponderada e componentes indisponíveis |
 | `tests/prompts/registry.test.ts` | Interpolação e regras obrigatórias dos prompts |
 | `tests/shared/retry.test.ts` | Backoff exponencial, rate limit, timeout |
+| `tests/photos/imageValidation.test.ts` | Magic bytes, limite de tamanho, extensão enganosa |
+| `tests/photos/GeminiVisionProvider.test.ts` | Tradução de erros da API, parsing tolerante do JSON |
+| `tests/photos/ImageAnalysisService.test.ts` | Falha isolada, retry, cache, custo, progresso, paralelismo |
+| `tests/photos/photoScore.test.ts` | Photo Score, melhor/pior foto, redundância, cobertura |
+| `tests/integration/persistence.live.test.ts` | `AICache` e `AIUsageLog` contra Postgres real |
+| `tests/integration/geminiVision.live.test.ts` | Chamada real ao Gemini (pulada sem chave) |
 
 ---
 
@@ -201,13 +254,12 @@ npm test
 | 0 | Fundação: banco, auth, CI, testes | ✅ |
 | 1 | Contratos de domínio e prompts versionados | ✅ |
 | 2 | Pricing: CSV do PriceLabs, métricas e score | ✅ |
-| 3 | Fotos: upload, `ImageAnalysisService`, Photo Score | ⏳ |
+| 3 | Fotos: validação, `GeminiVisionProvider`, cache, custo, Photo Score | ✅ |
 | 4 | Airbnb e Booking: entrada manual e mock, scores | ⏳ |
 | 5 | `RecommendationEngine` e Overall Score | ⏳ |
 | 6 | Dashboard com 🔴 / 🟡 / 🟢 | ⏳ |
 | 7 | Relatório completo (PDF depois) | ⏳ |
 | 8 | `CompetitorAnalysisService` (mock rotulado) | ⏳ |
 
-Controle de custo (`AIUsageLog`, `AICache`, `CostTracker`) e o pipeline por
-etapas com retry granular (`AnalysisStep`) já existem no schema e nos
-utilitários, e passam a ser exercitados na Etapa 3.
+O pipeline por etapas com retry granular (`AnalysisStep`) já existe no schema
+e passa a ser exercitado quando a UI de análise entrar, na Etapa 6.

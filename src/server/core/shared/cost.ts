@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Estimativa de custo das chamadas de IA.
  *
@@ -18,12 +20,63 @@ export interface ModelPricing {
 }
 
 /**
- * Tabela de preços por modelo. Mantida em um único lugar para que ajustar
- * custo não exija tocar em nenhum provider.
+ * Tabela de preços por modelo.
+ *
+ * Só o mock vem preenchido, e de propósito. Os preços dos fornecedores mudam,
+ * variam por região e por tier — chutar um valor aqui produziria um número que
+ * *parece* verdade no relatório de custo do usuário e não é. Preço é
+ * configuração do operador, não constante de código.
+ *
+ * Para habilitar a estimativa, informe `MODEL_PRICING_JSON` no ambiente com os
+ * valores da tabela oficial do fornecedor. Enquanto isso, os **tokens são
+ * registrados de verdade** no `AIUsageLog` e o custo aparece como desconhecido.
  */
-export const MODEL_PRICING: Record<string, ModelPricing> = {
+const BUILTIN_PRICING: Record<string, ModelPricing> = {
   'mock-model': { inputPerMillion: 0, outputPerMillion: 0 },
 };
+
+const pricingSchema = z.record(
+  z.string(),
+  z.object({
+    inputPerMillion: z.number().nonnegative(),
+    outputPerMillion: z.number().nonnegative(),
+  }),
+);
+
+let overridesCache: Record<string, ModelPricing> | null = null;
+
+function loadOverrides(): Record<string, ModelPricing> {
+  if (overridesCache !== null) return overridesCache;
+
+  const raw = process.env['MODEL_PRICING_JSON'];
+
+  if (!raw || raw.trim() === '') {
+    overridesCache = {};
+    return overridesCache;
+  }
+
+  try {
+    overridesCache = pricingSchema.parse(JSON.parse(raw));
+  } catch {
+    // Configuração malformada não pode derrubar uma análise; o efeito é o
+    // mesmo de não ter preço: custo reportado como desconhecido.
+    overridesCache = {};
+  }
+
+  return overridesCache;
+}
+
+/** Limpa o cache da tabela de preços — usado em testes. */
+export function resetPricingCache(): void {
+  overridesCache = null;
+}
+
+export function getModelPricing(model: string): ModelPricing | undefined {
+  return loadOverrides()[model] ?? BUILTIN_PRICING[model];
+}
+
+/** @deprecated Use `getModelPricing`, que considera os overrides de ambiente. */
+export const MODEL_PRICING = BUILTIN_PRICING;
 
 export interface UsageInput {
   provider: AIProviderName;
@@ -41,15 +94,16 @@ export interface CostEstimate {
 }
 
 export function estimateCost(usage: UsageInput): CostEstimate {
-  const pricing = MODEL_PRICING[usage.model];
+  const pricing = getModelPricing(usage.model);
 
   if (!pricing) {
     return {
       estimatedCostUsd: 0,
       pricingKnown: false,
       warning:
-        `Modelo "${usage.model}" não está em MODEL_PRICING; ` +
-        'custo não pôde ser estimado. Adicione o preço em shared/cost.ts.',
+        `Sem preço configurado para o modelo "${usage.model}"; os tokens foram ` +
+        'registrados, mas o custo não pôde ser estimado. Informe os valores ' +
+        'da tabela oficial do fornecedor em MODEL_PRICING_JSON.',
     };
   }
 

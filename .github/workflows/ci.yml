@@ -53,5 +53,11 @@ jobs:
       - name: Rodar testes
         run: npm test
 
+      # O CI tem Postgres, então os testes de persistência rodam de verdade.
+      # Os que exigem credencial de IA se pulam sozinhos (sem GEMINI_API_KEY),
+      # de propósito: o CI não deve consumir cota nem depender de rede externa.
+      - name: Rodar testes de integração
+        run: npm run test:live
+
       - name: Build de produção
         run: npx next build
