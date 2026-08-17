@@ -169,6 +169,28 @@ describe('GeminiVisionProvider — tradução de erros', () => {
     });
   }
 
+  it('404 de modelo descontinuado não é retentável e aponta a env certa', async () => {
+    // Corpo real devolvido pela API para um modelo retirado do acesso de
+    // contas novas. Retentar não faz o modelo voltar, e a mensagem precisa
+    // dizer que o problema é configuração — não a imagem.
+    const provider = providerWith(async () => {
+      throw Object.assign(
+        new Error(
+          'This model models/gemini-2.5-flash is no longer available to new ' +
+            'users. Please update your code to use a newer model.',
+        ),
+        { status: 404 },
+      );
+    });
+
+    const error = await provider.analyzeImage(IMAGE).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ProviderError);
+    expect(error).not.toBeInstanceOf(InvalidInputError);
+    expect((error as ProviderError).retryable).toBe(false);
+    expect((error as ProviderError).message).toContain('VISION_MODEL');
+  });
+
   it('401 de credencial não é confundido com imagem inválida', async () => {
     // Regressão de um bug pego só na chamada real: o corpo do 401 contém
     // "ACCESS_TOKEN_TYPE_UNSUPPORTED", e o filtro por /unsupported/ avaliado

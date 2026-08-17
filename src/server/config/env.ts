@@ -44,9 +44,17 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
 
-  VISION_MODEL: z.string().default('gemini-2.5-flash'),
-  LLM_MODEL_CHEAP: z.string().default('gemini-2.5-flash'),
-  LLM_MODEL_SMART: z.string().default('gemini-2.5-pro'),
+  /**
+   * Modelos padrão.
+   *
+   * Verificados contra a API em 2026-08. O Google retira modelos antigos do
+   * acesso de contas novas — `gemini-2.5-flash` já responde 404 para elas —
+   * então confira com `GET /v1beta/models` antes de fixar um valor aqui.
+   * Os aliases `*-latest` não expiram, ao custo de o modelo mudar sob você.
+   */
+  VISION_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  LLM_MODEL_CHEAP: z.string().default('gemini-3.5-flash-lite'),
+  LLM_MODEL_SMART: z.string().default('gemini-3.5-flash'),
 
   // Fotos analisadas em paralelo. Baixo de propósito: rajada grande dispara
   // rate limit, e o retry sai mais caro que a espera.

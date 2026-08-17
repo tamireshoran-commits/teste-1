@@ -214,6 +214,17 @@ export class GeminiVisionProvider implements VisionProvider {
         );
       }
 
+      if (status === 404) {
+        // Modelo inexistente ou retirado do acesso da conta. Retentar não faz
+        // o modelo voltar — é erro de configuração, e a mensagem precisa
+        // apontar para a env certa em vez de culpar a imagem.
+        return new ProviderError(
+          `O modelo "${this.model}" não está disponível para esta chave. ` +
+            `Ajuste VISION_MODEL. Resposta da API: ${message}`,
+          { provider: this.name, retryable: false, status },
+        );
+      }
+
       if (status === 400 || status === 422) {
         // 400 aqui é quase sempre imagem que o modelo não consegue decodificar.
         return new InvalidInputError(

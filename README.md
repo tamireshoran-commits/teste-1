@@ -134,14 +134,28 @@ Detalhes em [`src/server/core/providers/listing/README.md`](src/server/core/prov
 Nenhuma credencial no código. Tudo passa por `.env` e é validado no boot por
 `src/server/config/env.ts`, que falha com mensagem clara se faltar algo.
 
-A chave do Gemini precisa ser uma **API key da Generative Language API**
-(as do Google AI Studio, prefixo `AIza`). Tokens OAuth do Google Cloud, mesmo
-rotulados como "chave de API" no console, são recusados com
-`ACCESS_TOKEN_TYPE_UNSUPPORTED`.
-
 Sem `GEMINI_API_KEY`, o registry cai para o `MockVisionProvider` com um aviso
 no log — a aplicação continua funcionando, e o resultado vem marcado
 `provider: "mock"` para a interface poder rotular como simulado.
+
+### Escolha do modelo
+
+O Google **retira modelos antigos do acesso de contas novas**. O
+`gemini-2.5-flash` já responde `404 — no longer available to new users` para
+elas, mesmo continuando a aparecer em `GET /v1beta/models`. Liste o que a sua
+chave realmente acessa antes de fixar `VISION_MODEL`:
+
+```bash
+curl -s "https://generativelanguage.googleapis.com/v1beta/models" \
+  -H "x-goog-api-key: $GEMINI_API_KEY" | grep '"name"'
+```
+
+O provider trata esse 404 como erro de configuração **não retentável**, com
+mensagem apontando para `VISION_MODEL` — retentar não faz o modelo voltar.
+
+Os aliases (`gemini-flash-lite-latest`) nunca expiram, mas o modelo por trás
+muda sem aviso, e notas de análises antigas deixam de ser comparáveis com as
+novas. Por isso o padrão é uma versão fixa.
 
 ---
 
@@ -218,7 +232,7 @@ descontos (10) e completude dos dados (10).
 
 ## Testes
 
-227 testes unitários, mais uma suíte de integração que roda contra
+228 testes unitários, mais uma suíte de integração que roda contra
 serviços reais:
 
 ```bash
@@ -243,7 +257,7 @@ npm run test:live   # banco real + APIs externas (pula o que não tem credencial
 | `tests/photos/ImageAnalysisService.test.ts` | Falha isolada, retry, cache, custo, progresso, paralelismo |
 | `tests/photos/photoScore.test.ts` | Photo Score, melhor/pior foto, redundância, cobertura |
 | `tests/integration/persistence.live.test.ts` | `AICache` e `AIUsageLog` contra Postgres real |
-| `tests/integration/geminiVision.live.test.ts` | Chamada real ao Gemini (pulada sem chave) |
+| `tests/integration/geminiVision.live.test.ts` | Chamada real ao Gemini: contrato, tokens, cache e score (pulada sem chave) |
 
 ---
 
