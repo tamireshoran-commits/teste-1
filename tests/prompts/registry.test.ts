@@ -15,8 +15,16 @@ const VARIABLES: Record<PromptName, Record<string, string>> = {
     city: 'Florianópolis',
     position: '0',
   },
-  'airbnb-analysis': { listingJson: '{}' },
-  'booking-analysis': { listingJson: '{}' },
+  'airbnb-analysis': {
+    listingJson: '{}',
+    alreadyFlaggedJson: '[]',
+    alreadyMissingJson: '[]',
+  },
+  'booking-analysis': {
+    listingJson: '{}',
+    alreadyFlaggedJson: '[]',
+    alreadyMissingJson: '[]',
+  },
   'pricing-analysis': { metricsJson: '{}', problemsJson: '[]' },
   recommendations: {
     scoresJson: '{}',

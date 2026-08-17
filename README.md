@@ -5,9 +5,9 @@ recebe dados de um anúncio (Airbnb, Booking.com) e a exportação de pricing do
 PriceLabs, e devolve scores, diagnóstico e recomendações priorizadas por
 impacto.
 
-> **Estado atual: Etapas 0 a 3 concluídas.** Pricing e análise de fotos estão
-> funcionais de ponta a ponta. Anúncios e recomendações têm os contratos
-> prontos, mas ainda não têm implementação — ver [Roadmap](#roadmap).
+> **Estado atual: Etapas 0 a 4 concluídas.** Pricing, fotos e anúncios
+> (Airbnb/Booking) estão funcionais de ponta a ponta. Faltam o motor de
+> recomendações, o dashboard e o relatório — ver [Roadmap](#roadmap).
 
 ---
 
@@ -114,11 +114,11 @@ apenas exibe.
 
 | Componente | Hoje | Para trocar depois |
 |---|---|---|
-| **Airbnb** | Sem implementação; contrato pronto | `RealAirbnbProvider` + `AIRBNB_PROVIDER` |
-| **Booking.com** | Sem implementação; contrato pronto | `RealBookingProvider` + `BOOKING_PROVIDER` |
+| **Airbnb** | ✅ Entrada manual validada + mock rotulado | `RealAirbnbProvider` (stub pronto) quando houver acesso oficial |
+| **Booking.com** | ✅ Entrada manual validada + mock rotulado | `RealBookingProvider` (stub pronto) quando houver parceria |
 | **PriceLabs API** | `PriceLabsAPIProvider` lança `ProviderUnavailableError` | Implementar `load()` + `PRICING_PROVIDER=PRICELABS_API` |
 | **Visão (fotos)** | ✅ `GeminiVisionProvider` real; `MockVisionProvider` como fallback | Adaptadores Claude/OpenAI via `VISION_PROVIDER` |
-| **LLM (texto)** | Contrato pronto, sem implementação | Etapa 5 |
+| **LLM (texto)** | ✅ `GeminiLLMProvider` real; `MockLLMProvider` sem improviso | Adaptadores Claude/OpenAI via `LLM_PROVIDER` |
 | **Storage** | ✅ `LocalStorageProvider` (disco) | `LOCAL` → `S3` via env |
 | **Concorrentes** | Coluna `isMock` no banco obriga rótulo na UI | Entrada manual ou fonte licenciada |
 
@@ -193,6 +193,52 @@ valor chutado pareceria verdade no relatório do cliente.
 
 ---
 
+## Módulo de anúncios (Etapa 4)
+
+### Origem dos dados
+
+Sem scraping. O dono informa os dados do próprio anúncio num formulário
+validado (`listingSchema.ts`), e o mock existe só para desenvolver a interface.
+`RealAirbnbProvider` e `RealBookingProvider` existem como contrato e declaram
+indisponibilidade — quando houver acesso oficial, é implementar `fetchListing`.
+
+O mock é **deliberadamente imperfeito** (descrição curta, poucas fotos,
+política rígida): um mock perfeito daria score alto e esconderia bugs no
+diagnóstico. Tudo que ele devolve vem com `isMock: true` e textos prefixados
+com `[EXEMPLO]`.
+
+### Duas camadas de análise
+
+1. **Regras determinísticas** (`checks.ts`) — sempre rodam, custo zero,
+   resultado reproduzível: tamanho de título, cobertura de comodidades, campos
+   ausentes, rigidez de política, volume de avaliações.
+2. **Leitura qualitativa por IA** — julga o que regra não alcança:
+   posicionamento, diferenciais, coerência entre título e descrição, tom.
+
+A camada 2 é **best-effort**. Se a IA falhar, ficar indisponível ou responder
+fora do contrato, a análise entrega a camada 1 e registra o motivo — um
+diagnóstico parcial vale mais que erro na tela.
+
+O prompt recebe o que as regras já detectaram e é instruído a não repetir.
+Sem isso, o modelo reescrevia os mesmos achados com outras palavras: numa
+verificação real foram 12 problemas para 7 questões distintas.
+
+### Escalas de nota
+
+Airbnb usa 0–5 e Booking 0–10. O schema valida cada plataforma na sua escala
+(4,8 é válido no Airbnb, 8,4 não é) e o score normaliza para 0–100 internamente.
+
+A reputação usa encolhimento em direção à média: nota 5,0 com 2 avaliações não
+vale o mesmo que 4,8 com 300, e o peso cresce até 30 avaliações.
+
+### O eixo de competitividade
+
+Mede desvio das boas práticas publicadas pelas plataformas, **não** comparação
+com concorrentes reais — não temos dados deles, e inventá-los seria ficção. A
+razão exibida diz isso explicitamente.
+
+---
+
 ## Módulo de pricing (Etapa 2)
 
 ### Importação de CSV
@@ -232,7 +278,7 @@ descontos (10) e completude dos dados (10).
 
 ## Testes
 
-228 testes unitários, mais uma suíte de integração que roda contra
+316 testes unitários, mais uma suíte de integração que roda contra
 serviços reais:
 
 ```bash
@@ -258,6 +304,11 @@ npm run test:live   # banco real + APIs externas (pula o que não tem credencial
 | `tests/photos/photoScore.test.ts` | Photo Score, melhor/pior foto, redundância, cobertura |
 | `tests/integration/persistence.live.test.ts` | `AICache` e `AIUsageLog` contra Postgres real |
 | `tests/integration/geminiVision.live.test.ts` | Chamada real ao Gemini: contrato, tokens, cache e score (pulada sem chave) |
+| `tests/listing/listingSchema.test.ts` | Validação da entrada manual, escala de nota por plataforma, URLs |
+| `tests/listing/providers.test.ts` | Providers manual, mock rotulado e stubs de integração real |
+| `tests/listing/checks.test.ts` | Regras determinísticas de título, comodidades, políticas e reputação |
+| `tests/listing/ListingAnalysisService.test.ts` | Airbnb/Booking Score, fallback sem IA, cache, deduplicação |
+| `tests/integration/geminiListing.live.test.ts` | Leitura qualitativa real do anúncio (pulada sem chave) |
 
 ---
 
@@ -269,7 +320,7 @@ npm run test:live   # banco real + APIs externas (pula o que não tem credencial
 | 1 | Contratos de domínio e prompts versionados | ✅ |
 | 2 | Pricing: CSV do PriceLabs, métricas e score | ✅ |
 | 3 | Fotos: validação, `GeminiVisionProvider`, cache, custo, Photo Score | ✅ |
-| 4 | Airbnb e Booking: entrada manual e mock, scores | ⏳ |
+| 4 | Airbnb e Booking: entrada manual, mock, scores e leitura por IA | ✅ |
 | 5 | `RecommendationEngine` e Overall Score | ⏳ |
 | 6 | Dashboard com 🔴 / 🟡 / 🟢 | ⏳ |
 | 7 | Relatório completo (PDF depois) | ⏳ |

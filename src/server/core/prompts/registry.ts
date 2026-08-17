@@ -21,8 +21,10 @@ export type PromptName =
 /** Versão ativa de cada prompt. Subir aqui invalida o cache daquela função. */
 export const ACTIVE_PROMPT_VERSIONS: Record<PromptName, string> = {
   'photo-analysis': 'v1',
-  'airbnb-analysis': 'v1',
-  'booking-analysis': 'v1',
+  // v2: informa ao modelo o que as regras determinísticas já detectaram, para
+  // ele não duplicar achados nem devolver nomes de campo no lugar de rótulos.
+  'airbnb-analysis': 'v2',
+  'booking-analysis': 'v2',
   'pricing-analysis': 'v1',
   'recommendations': 'v1',
 };
