@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceef2;
+  --color-ink-300: #c3c8d4;
+  --color-ink-500: #6b7280;
+  --color-ink-700: #374151;
+  --color-ink-900: #111827;
+
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+
+  --color-score-good: #16a34a;
+  --color-score-mid: #d97706;
+  --color-score-bad: #dc2626;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+}

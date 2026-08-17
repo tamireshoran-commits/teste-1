@@ -1,0 +1,549 @@
+// =============================================================================
+// StayScore — schema do banco
+//
+// O schema completo do MVP é declarado aqui de uma vez para que as migrations
+// fiquem estáveis; as etapas seguintes preenchem as tabelas conforme forem
+// implementadas. Campos flexíveis (resultados de IA, métricas) usam Json para
+// evitar migrations a cada ajuste de prompt/heurística.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// -----------------------------------------------------------------------------
+// Autenticação (Auth.js + credenciais)
+// -----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts   Account[]
+  sessions   Session[]
+  properties Property[]
+  analyses   Analysis[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// -----------------------------------------------------------------------------
+// Propriedades e análises
+// -----------------------------------------------------------------------------
+
+model Property {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  city         String?
+  country      String?
+  propertyType String?
+  bedrooms     Int?
+  bathrooms    Float?
+  maxGuests    Int?
+  airbnbUrl    String?
+  bookingUrl   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses Analysis[]
+
+  @@index([userId])
+  @@map("properties")
+}
+
+enum AnalysisStatus {
+  DRAFT
+  QUEUED
+  RUNNING
+  PARTIAL
+  COMPLETED
+  FAILED
+}
+
+model Analysis {
+  id         String         @id @default(cuid())
+  userId     String
+  propertyId String
+  status     AnalysisStatus @default(DRAFT)
+
+  // Scores consolidados (0-100). Null enquanto a etapa não rodou.
+  overallScore    Int?
+  airbnbScore     Int?
+  bookingScore    Int?
+  pricingScore    Int?
+  photoScore      Int?
+  contentScore    Int?
+  reputationScore Int?
+
+  // Detalhamento por componente + versão dos pesos usados no cálculo.
+  scoreBreakdown Json?
+  scoreConfigId  String?
+
+  estimatedCostUsd Float    @default(0)
+  errorMessage     String?
+  createdAt        DateTime @default(now())
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  updatedAt        DateTime @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  scoreConfig     ScoreConfig?      @relation(fields: [scoreConfigId], references: [id])
+  steps           AnalysisStep[]
+  photos          Photo[]
+  listings        ListingSnapshot[]
+  listingAnalyses ListingAnalysis[]
+  pricingDatasets PricingDataset[]
+  pricingAnalysis PricingAnalysis?
+  recommendations Recommendation[]
+  competitors     Competitor[]
+  aiUsageLogs     AIUsageLog[]
+
+  @@index([userId, createdAt])
+  @@index([propertyId])
+  @@map("analyses")
+}
+
+enum StepType {
+  AIRBNB
+  BOOKING
+  PHOTOS
+  PRICING
+  RECOMMENDATIONS
+  REPORT
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  SKIPPED
+}
+
+/// Uma etapa do pipeline. Falha isolada permite retry só desta etapa,
+/// sem reprocessar a análise inteira (requisito de UX do produto).
+model AnalysisStep {
+  id           String     @id @default(cuid())
+  analysisId   String
+  type         StepType
+  status       StepStatus @default(PENDING)
+  attempts     Int        @default(0)
+  /// Progresso granular, ex.: 7 de 24 fotos.
+  progressDone Int        @default(0)
+  progressTotal Int       @default(0)
+  /// Mensagem exibida ao usuário, ex.: "Analisando fotos 7/24...".
+  message      String?
+  errorCode    String?
+  errorMessage String?
+  result       Json?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisId, type])
+  @@index([status])
+  @@map("analysis_steps")
+}
+
+// -----------------------------------------------------------------------------
+// Fotos (Etapa 3)
+// -----------------------------------------------------------------------------
+
+model Photo {
+  id           String   @id @default(cuid())
+  analysisId   String
+  storageKey   String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  /// sha256 do arquivo — chave de cache para não reanalisar a mesma imagem.
+  sha256       String
+  position     Int
+  createdAt    DateTime @default(now())
+
+  analysis Analysis       @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  result   PhotoAnalysis?
+
+  @@unique([analysisId, position])
+  @@index([sha256])
+  @@map("photos")
+}
+
+enum PhotoAnalysisStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+model PhotoAnalysis {
+  id      String              @id @default(cuid())
+  photoId String              @unique
+  status  PhotoAnalysisStatus @default(PENDING)
+
+  roomType        String?
+  visualQuality   Int?
+  lighting        Int?
+  composition     Int?
+  professionalism Int?
+  valuePerception Int?
+  clarity         Int?
+  score           Int?
+
+  strengths       Json?
+  problems        Json?
+  recommendations Json?
+
+  provider     String?
+  model        String?
+  fromCache    Boolean @default(false)
+  errorCode    String?
+  errorMessage String?
+  raw          Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  photo Photo @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@map("photo_analyses")
+}
+
+// -----------------------------------------------------------------------------
+// Anúncios: Airbnb / Booking (Etapa 4)
+// -----------------------------------------------------------------------------
+
+enum Platform {
+  AIRBNB
+  BOOKING
+}
+
+enum ListingSource {
+  MANUAL
+  MOCK
+  API
+}
+
+/// Snapshot normalizado do anúncio, no formato do DTO ListingData.
+/// `isMock` marca explicitamente dados simulados — nunca exibir como reais.
+model ListingSnapshot {
+  id         String        @id @default(cuid())
+  analysisId String
+  platform   Platform
+  source     ListingSource
+  isMock     Boolean       @default(false)
+  externalUrl String?
+  data       Json
+  capturedAt DateTime      @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisId, platform])
+  @@map("listing_snapshots")
+}
+
+model ListingAnalysis {
+  id         String   @id @default(cuid())
+  analysisId String
+  platform   Platform
+
+  score          Int?
+  scoreBreakdown Json?
+  strengths      Json?
+  weaknesses     Json?
+  missingInfo    Json?
+  positioning    String?
+  raw            Json?
+
+  provider  String?
+  model     String?
+  createdAt DateTime @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisId, platform])
+  @@map("listing_analyses")
+}
+
+// -----------------------------------------------------------------------------
+// Pricing (Etapa 2)
+// -----------------------------------------------------------------------------
+
+enum PricingSource {
+  CSV_PRICELABS
+  PRICELABS_API
+}
+
+model PricingDataset {
+  id         String        @id @default(cuid())
+  analysisId String
+  source     PricingSource
+  fileName   String?
+  currency   String?
+  rowCount   Int           @default(0)
+  skippedCount Int         @default(0)
+  dateFrom   DateTime?
+  dateTo     DateTime?
+  /// Mapeamento header do CSV -> campo canônico, para auditoria do parse.
+  columnMapping Json?
+  warnings   Json?
+  createdAt  DateTime      @default(now())
+
+  analysis Analysis     @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  rows     PricingRow[]
+
+  @@index([analysisId])
+  @@map("pricing_datasets")
+}
+
+/// Uma linha = um dia do calendário. Campos null significam "dado ausente
+/// no CSV" e nunca são preenchidos com estimativas.
+model PricingRow {
+  id        String   @id @default(cuid())
+  datasetId String
+  date      DateTime @db.Date
+
+  price            Float?
+  recommendedPrice Float?
+  minPrice         Float?
+  maxPrice         Float?
+  occupancy        Float?
+  booked           Boolean?
+  bookings         Int?
+  adr              Float?
+  revpar           Float?
+  leadTimeDays     Int?
+  minStay          Int?
+  season           String?
+  events           Json?
+  adjustmentPct    Float?
+  weekendMarkupPct Float?
+  discountPct      Float?
+
+  /// Dia da semana derivado da data (0 = domingo).
+  weekday   Int
+  isWeekend Boolean
+
+  /// Linha original do CSV, para auditoria.
+  raw Json?
+
+  dataset PricingDataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@unique([datasetId, date])
+  @@index([datasetId, date])
+  @@map("pricing_rows")
+}
+
+model PricingAnalysis {
+  id         String @id @default(cuid())
+  analysisId String @unique
+
+  score          Int
+  scoreBreakdown Json
+  metrics        Json
+  problems       Json
+  opportunities  Json
+
+  createdAt DateTime @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@map("pricing_analyses")
+}
+
+// -----------------------------------------------------------------------------
+// Recomendações (Etapa 5)
+// -----------------------------------------------------------------------------
+
+enum RecommendationCategory {
+  PHOTOS
+  CONTENT
+  AMENITIES
+  PRICING
+  REPUTATION
+  POLICIES
+  COMPETITIVENESS
+}
+
+enum ImpactLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model Recommendation {
+  id         String                 @id @default(cuid())
+  analysisId String
+  title      String
+  description String
+  category   RecommendationCategory
+  priority   ImpactLevel
+  estimatedImpact ImpactLevel
+  difficulty Difficulty
+  /// 0..1 — confiança do modelo na recomendação.
+  confidence Float
+  /// Texto explicando o porquê, sempre em linguagem de hipótese.
+  reason     String
+  action     String
+  /// Dados concretos que sustentam a recomendação (evita alucinação solta).
+  evidence   Json?
+  sourceStep StepType?
+  rank       Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId, rank])
+  @@map("recommendations")
+}
+
+// -----------------------------------------------------------------------------
+// Concorrentes (Etapa 8)
+// -----------------------------------------------------------------------------
+
+/// `isMock = true` obriga a UI a rotular o dado como simulado.
+model Competitor {
+  id          String    @id @default(cuid())
+  analysisId  String
+  isMock      Boolean   @default(true)
+  name        String
+  platform    Platform?
+  externalUrl String?
+  price       Float?
+  rating      Float?
+  reviewCount Int?
+  photoCount  Int?
+  amenities   Json?
+  data        Json?
+  createdAt   DateTime  @default(now())
+
+  analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@map("competitors")
+}
+
+// -----------------------------------------------------------------------------
+// Custo e cache de IA
+// -----------------------------------------------------------------------------
+
+model AIUsageLog {
+  id         String   @id @default(cuid())
+  analysisId String?
+  provider   String
+  model      String
+  /// Ex.: "photo-analysis", "recommendations".
+  operation  String
+  inputTokens  Int    @default(0)
+  outputTokens Int    @default(0)
+  imageCount   Int    @default(0)
+  estimatedCostUsd Float @default(0)
+  latencyMs  Int?
+  success    Boolean  @default(true)
+  errorCode  String?
+  createdAt  DateTime @default(now())
+
+  analysis Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+
+  @@index([analysisId])
+  @@index([createdAt])
+  @@map("ai_usage_logs")
+}
+
+/// Cache de respostas de IA. Chave = hash(promptVersion + model + input).
+model AICache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  provider  String
+  model     String
+  operation String
+  response  Json
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  @@index([expiresAt])
+  @@map("ai_cache")
+}
+
+// -----------------------------------------------------------------------------
+// Configuração de scoring (item 10: cálculo no backend, não no frontend)
+// -----------------------------------------------------------------------------
+
+model ScoreConfig {
+  id        String   @id @default(cuid())
+  version   String   @unique
+  isActive  Boolean  @default(false)
+  /// Pesos de cada componente do score geral e dos sub-scores.
+  weights   Json
+  notes     String?
+  createdAt DateTime @default(now())
+
+  analyses Analysis[]
+
+  @@map("score_configs")
+}

@@ -1,0 +1,44 @@
+# dependências
+node_modules/
+.pnp
+.pnp.js
+
+# build
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Prisma client gerado (recriado por `prisma generate`)
+/src/generated/
+
+# variáveis de ambiente — nunca versionar credenciais
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# uploads locais (LocalStorageProvider) — mantém a pasta, ignora o conteúdo.
+# Precisa ser /storage/* e não /storage/: o git não reinclui um arquivo
+# quando o diretório pai inteiro está excluído.
+/storage/*
+!/storage/.gitkeep
+
+# testes e coverage
+coverage/
+
+# skills de agente instaladas pelo `prisma init` (recriáveis, ~500KB)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+
+# sistema / editor
+.DS_Store
+*.pem
+*.log
+npm-debug.log*
+.vscode/
+.idea/
