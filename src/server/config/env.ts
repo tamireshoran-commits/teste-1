@@ -79,6 +79,52 @@ const envSchema = z.object({
   MAX_COST_PER_ANALYSIS_USD: positiveNumber(1),
 
   DEBUG_LOGS: booleanish.default(false),
+
+  // ---------------------------------------------------------------------------
+  // Growth Engine — marketing e vendas por agentes
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Integrações sociais. MOCK deixa todo o fluxo rodável sem App Review da
+   * Meta: nada é publicado nem enviado de verdade, e o resultado carrega
+   * `isMock: true` para a interface rotular.
+   */
+  SOCIAL_PROVIDER: z.enum(['MOCK', 'META']).default('MOCK'),
+  IMAGE_PROVIDER: z.enum(['MOCK', 'GEMINI']).default('MOCK'),
+  VIDEO_PROVIDER: z.enum(['MOCK', 'EXTERNAL']).default('MOCK'),
+  TTS_PROVIDER: z.enum(['MOCK', 'EXTERNAL']).default('MOCK'),
+
+  /**
+   * Versão da Graph API fixada de propósito: a Meta expira versões em cerca de
+   * dois anos e muda o formato de resposta entre elas. Subir aqui é uma
+   * decisão consciente, não um efeito colateral de deploy.
+   */
+  META_GRAPH_VERSION: z.string().default('v21.0'),
+  /** Segredo do app — usado para validar a assinatura do webhook. */
+  META_APP_SECRET: z.string().optional(),
+  /** Token que a Meta ecoa na verificação do webhook (hub.verify_token). */
+  META_VERIFY_TOKEN: z.string().optional(),
+  /**
+   * Token padrão de acesso. O token por conta vem de `SocialAccount.tokenRef`,
+   * que guarda o NOME de uma variável de ambiente — nunca o token em si.
+   */
+  META_ACCESS_TOKEN: z.string().optional(),
+
+  IMAGE_MODEL: z.string().default('gemini-3.5-flash-image'),
+
+  /** Quantos jobs o worker processa por tick. */
+  GROWTH_WORKER_BATCH_SIZE: positiveNumber(5),
+  /** Tempo após o qual um job travado (worker morto) volta para a fila. */
+  GROWTH_JOB_LOCK_TIMEOUT_MS: positiveNumber(300_000),
+  /**
+   * Janela de resposta da Meta, em horas. Fora dela nenhuma DM sai — nem no
+   * modo autônomo. Configurável porque a Meta já mudou esse número.
+   */
+  GROWTH_MESSAGE_WINDOW_HOURS: positiveNumber(24),
+  /** Teto de custo de IA por workspace por dia, em USD. */
+  GROWTH_MAX_DAILY_COST_USD: positiveNumber(2),
+  /** Protege o endpoint de tick do worker chamado por cron externo. */
+  CRON_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -35,6 +35,13 @@ model User {
   properties Property[]
   analyses   Analysis[]
 
+  // Growth Engine
+  ownedWorkspaces       Workspace[]       @relation("WorkspaceOwner")
+  workspaceMemberships  WorkspaceMember[]
+  approvedContent       ContentPiece[]    @relation("ContentApprover")
+  assignedConversations Conversation[]    @relation("ConversationAssignee")
+  approvalDecisions     ApprovalRequest[] @relation("ApprovalDecider")
+
   @@map("users")
 }
 
@@ -132,12 +139,12 @@ model Analysis {
   scoreBreakdown Json?
   scoreConfigId  String?
 
-  estimatedCostUsd Float    @default(0)
+  estimatedCostUsd Float     @default(0)
   errorMessage     String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
   startedAt        DateTime?
   finishedAt       DateTime?
-  updatedAt        DateTime @updatedAt
+  updatedAt        DateTime  @updatedAt
 
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -177,23 +184,23 @@ enum StepStatus {
 /// Uma etapa do pipeline. Falha isolada permite retry só desta etapa,
 /// sem reprocessar a análise inteira (requisito de UX do produto).
 model AnalysisStep {
-  id           String     @id @default(cuid())
-  analysisId   String
-  type         StepType
-  status       StepStatus @default(PENDING)
-  attempts     Int        @default(0)
+  id            String     @id @default(cuid())
+  analysisId    String
+  type          StepType
+  status        StepStatus @default(PENDING)
+  attempts      Int        @default(0)
   /// Progresso granular, ex.: 7 de 24 fotos.
-  progressDone Int        @default(0)
-  progressTotal Int       @default(0)
+  progressDone  Int        @default(0)
+  progressTotal Int        @default(0)
   /// Mensagem exibida ao usuário, ex.: "Analisando fotos 7/24...".
-  message      String?
-  errorCode    String?
-  errorMessage String?
-  result       Json?
-  startedAt    DateTime?
-  finishedAt   DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  message       String?
+  errorCode     String?
+  errorMessage  String?
+  result        Json?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
@@ -285,14 +292,14 @@ enum ListingSource {
 /// Snapshot normalizado do anúncio, no formato do DTO ListingData.
 /// `isMock` marca explicitamente dados simulados — nunca exibir como reais.
 model ListingSnapshot {
-  id         String        @id @default(cuid())
-  analysisId String
-  platform   Platform
-  source     ListingSource
-  isMock     Boolean       @default(false)
+  id          String        @id @default(cuid())
+  analysisId  String
+  platform    Platform
+  source      ListingSource
+  isMock      Boolean       @default(false)
   externalUrl String?
-  data       Json
-  capturedAt DateTime      @default(now())
+  data        Json
+  capturedAt  DateTime      @default(now())
 
   analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
@@ -333,19 +340,19 @@ enum PricingSource {
 }
 
 model PricingDataset {
-  id         String        @id @default(cuid())
-  analysisId String
-  source     PricingSource
-  fileName   String?
-  currency   String?
-  rowCount   Int           @default(0)
-  skippedCount Int         @default(0)
-  dateFrom   DateTime?
-  dateTo     DateTime?
+  id            String        @id @default(cuid())
+  analysisId    String
+  source        PricingSource
+  fileName      String?
+  currency      String?
+  rowCount      Int           @default(0)
+  skippedCount  Int           @default(0)
+  dateFrom      DateTime?
+  dateTo        DateTime?
   /// Mapeamento header do CSV -> campo canônico, para auditoria do parse.
   columnMapping Json?
-  warnings   Json?
-  createdAt  DateTime      @default(now())
+  warnings      Json?
+  createdAt     DateTime      @default(now())
 
   analysis Analysis     @relation(fields: [analysisId], references: [id], onDelete: Cascade)
   rows     PricingRow[]
@@ -436,24 +443,24 @@ enum Difficulty {
 }
 
 model Recommendation {
-  id         String                 @id @default(cuid())
-  analysisId String
-  title      String
-  description String
-  category   RecommendationCategory
-  priority   ImpactLevel
+  id              String                 @id @default(cuid())
+  analysisId      String
+  title           String
+  description     String
+  category        RecommendationCategory
+  priority        ImpactLevel
   estimatedImpact ImpactLevel
-  difficulty Difficulty
+  difficulty      Difficulty
   /// 0..1 — confiança do modelo na recomendação.
-  confidence Float
+  confidence      Float
   /// Texto explicando o porquê, sempre em linguagem de hipótese.
-  reason     String
-  action     String
+  reason          String
+  action          String
   /// Dados concretos que sustentam a recomendação (evita alucinação solta).
-  evidence   Json?
-  sourceStep StepType?
-  rank       Int       @default(0)
-  createdAt  DateTime  @default(now())
+  evidence        Json?
+  sourceStep      StepType?
+  rank            Int                    @default(0)
+  createdAt       DateTime               @default(now())
 
   analysis Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
@@ -492,38 +499,43 @@ model Competitor {
 // -----------------------------------------------------------------------------
 
 model AIUsageLog {
-  id         String   @id @default(cuid())
-  analysisId String?
-  provider   String
-  model      String
+  id               String   @id @default(cuid())
+  analysisId       String?
+  /// Preenchido pelas operações do Growth Engine: o custo precisa ser
+  /// atribuível ao workspace para virar cobrança por cliente no futuro.
+  workspaceId      String?
+  provider         String
+  model            String
   /// Ex.: "photo-analysis", "recommendations".
-  operation  String
-  inputTokens  Int    @default(0)
-  outputTokens Int    @default(0)
-  imageCount   Int    @default(0)
-  estimatedCostUsd Float @default(0)
-  latencyMs  Int?
-  success    Boolean  @default(true)
-  errorCode  String?
-  createdAt  DateTime @default(now())
+  operation        String
+  inputTokens      Int      @default(0)
+  outputTokens     Int      @default(0)
+  imageCount       Int      @default(0)
+  estimatedCostUsd Float    @default(0)
+  latencyMs        Int?
+  success          Boolean  @default(true)
+  errorCode        String?
+  createdAt        DateTime @default(now())
 
-  analysis Analysis? @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  analysis  Analysis?  @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([analysisId])
+  @@index([workspaceId, createdAt])
   @@index([createdAt])
   @@map("ai_usage_logs")
 }
 
 /// Cache de respostas de IA. Chave = hash(promptVersion + model + input).
 model AICache {
-  id        String   @id @default(cuid())
-  cacheKey  String   @unique
+  id        String    @id @default(cuid())
+  cacheKey  String    @unique
   provider  String
   model     String
   operation String
   response  Json
-  hits      Int      @default(0)
-  createdAt DateTime @default(now())
+  hits      Int       @default(0)
+  createdAt DateTime  @default(now())
   expiresAt DateTime?
 
   @@index([expiresAt])
@@ -546,4 +558,985 @@ model ScoreConfig {
   analyses Analysis[]
 
   @@map("score_configs")
+}
+
+// =============================================================================
+// GROWTH ENGINE — marketing e vendas por agentes de IA
+//
+// Contexto separado do StayScore: todas as tabelas usam o prefixo `growth_`.
+// O desenho é multi-tenant desde o início (`Workspace`) porque transformar um
+// sistema single-tenant em SaaS depois é reescrita, não migração.
+//
+// Campos com saída de agente (persona, roteiro, métricas) são `Json` de
+// propósito: o formato ainda muda a cada versão de prompt, e migrar o schema a
+// cada ajuste travaria a iteração. O que entra em consulta, filtro ou funil é
+// coluna tipada.
+// =============================================================================
+
+/// Quanto o sistema pode fazer sozinho. Avaliado por ação, não globalmente —
+/// ver `ApprovalPolicy` em src/server/growth/policy/.
+enum ApprovalMode {
+  MANUAL
+  SEMI_AUTOMATIC
+  AUTONOMOUS
+}
+
+model Workspace {
+  id       String       @id @default(cuid())
+  ownerId  String
+  name     String
+  slug     String       @unique
+  mode     ApprovalMode @default(MANUAL)
+  timezone String       @default("America/Sao_Paulo")
+
+  /// Horário silencioso (hora local do workspace). Nenhuma mensagem sai neste
+  /// intervalo, em nenhum modo — madrugada é o jeito mais rápido de queimar a
+  /// marca e virar denúncia de spam.
+  quietHoursStart Int @default(21)
+  quietHoursEnd   Int @default(8)
+
+  /// Guardrails de custo e de frequência. Valem acima do modo de aprovação.
+  maxDailyCostUsd             Float @default(2)
+  maxMessagesPerContactPerDay Int   @default(3)
+  maxPublicationsPerDay       Int   @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner          User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members        WorkspaceMember[]
+  brandProfile   BrandProfile?
+  products       Product[]
+  strategies     MarketStrategy[]
+  contentPlans   ContentPlan[]
+  contentPieces  ContentPiece[]
+  socialAccounts SocialAccount[]
+  publications   Publication[]
+  contacts       Contact[]
+  conversations  Conversation[]
+  messages       Message[]
+  leads          Lead[]
+  deals          Deal[]
+  followUps      FollowUpTask[]
+  approvals      ApprovalRequest[]
+  jobs           GrowthJob[]
+  agentRuns      AgentRun[]
+  insights       LearningInsight[]
+  auditLogs      AuditLog[]
+  aiUsageLogs    AIUsageLog[]
+
+  @@index([ownerId])
+  @@map("growth_workspaces")
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  /// "OWNER" | "ADMIN" | "OPERATOR" — string para não exigir migration a cada
+  /// papel novo enquanto o modelo de permissão não estabiliza.
+  role        String   @default("OPERATOR")
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("growth_workspace_members")
+}
+
+// -----------------------------------------------------------------------------
+// Marca e oferta — o que os agentes podem afirmar
+// -----------------------------------------------------------------------------
+
+/// Fonte da verdade sobre a marca. O Agente Vendedor só pode afirmar o que
+/// está aqui e em `growth_products`; fora disso, transfere para humano.
+model BrandProfile {
+  id          String @id @default(cuid())
+  workspaceId String @unique
+
+  name             String
+  description      String?
+  toneOfVoice      String  @default("Profissional, direto e acolhedor.")
+  valueProposition String?
+  /// Temas, promessas e palavras proibidas. Entra no prompt de todo agente
+  /// que gera texto voltado ao público.
+  doNotSay         Json    @default("[]")
+  /// Regras livres de marca (ex.: "sempre citar o prazo de entrega").
+  guardrails       Json    @default("[]")
+  defaultCta       String?
+  language         String  @default("pt-BR")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("growth_brand_profiles")
+}
+
+model Product {
+  id            String  @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String
+  /// Em centavos, para não carregar erro de ponto flutuante em preço.
+  priceCents    Int?
+  currency      String  @default("BRL")
+  checkoutUrl   String?
+  schedulingUrl String?
+  benefits      Json    @default("[]")
+  faq           Json    @default("[]")
+  isActive      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads     Lead[]
+  deals     Deal[]
+
+  @@index([workspaceId, isActive])
+  @@map("growth_products")
+}
+
+// -----------------------------------------------------------------------------
+// Agente 1 — Estrategista de Mercado
+// -----------------------------------------------------------------------------
+
+enum StrategyStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model MarketStrategy {
+  id          String         @id @default(cuid())
+  workspaceId String
+  status      StrategyStatus @default(DRAFT)
+
+  /// Entrada crua informada pelo usuário (nicho, produto, contexto).
+  brief String
+  niche String
+
+  persona          Json
+  pains            Json
+  desires          Json
+  objections       Json
+  competitors      Json
+  opportunities    Json
+  valueProposition String
+  offer            Json
+  toneOfVoice      String
+
+  promptName    String?
+  promptVersion String?
+  provider      String?
+  model         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentPlans ContentPlan[]
+
+  @@index([workspaceId, status])
+  @@map("growth_market_strategies")
+}
+
+// -----------------------------------------------------------------------------
+// Agente 2 — Estrategista de Conteúdo
+// -----------------------------------------------------------------------------
+
+enum PlanStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ContentObjective {
+  REACH
+  ENGAGEMENT
+  LEADS
+  SALES
+}
+
+enum ContentFormat {
+  REEL
+  CAROUSEL
+  IMAGE
+  STORY
+  TEXT
+}
+
+enum FunnelStage {
+  AWARENESS
+  INTEREST
+  CONSIDERATION
+  DECISION
+  RETENTION
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+model ContentPlan {
+  id          String     @id @default(cuid())
+  workspaceId String
+  strategyId  String?
+  title       String
+  periodStart DateTime
+  periodEnd   DateTime
+  pillars     Json       @default("[]")
+  status      PlanStatus @default(DRAFT)
+
+  /// Insights de desempenho que alimentaram este plano (item 16 do escopo).
+  /// Guardar aqui permite comparar planos com e sem realimentação.
+  insightsUsed Json?
+
+  promptName    String?
+  promptVersion String?
+  model         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  strategy  MarketStrategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+  pieces    ContentPiece[]
+
+  @@index([workspaceId, status])
+  @@map("growth_content_plans")
+}
+
+model ContentPiece {
+  id          String  @id @default(cuid())
+  workspaceId String
+  planId      String?
+
+  objective   ContentObjective
+  format      ContentFormat
+  funnelStage FunnelStage
+  status      ContentStatus    @default(DRAFT)
+
+  audience String
+  theme    String
+  hook     String
+  script   String
+  caption  String
+  cta      String
+  keywords Json   @default("[]")
+
+  /// Plataformas alvo desta peça: ["INSTAGRAM","FACEBOOK"].
+  targets      Json      @default("[]")
+  scheduledFor DateTime?
+
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan          ContentPlan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
+  approvedBy    User?          @relation("ContentApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  media         MediaAsset[]
+  publications  Publication[]
+  conversations Conversation[]
+  leads         Lead[]
+
+  @@index([workspaceId, status, scheduledFor])
+  @@index([planId])
+  @@map("growth_content_pieces")
+}
+
+// -----------------------------------------------------------------------------
+// Agente 3 — Criador de mídia
+// -----------------------------------------------------------------------------
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  THUMBNAIL
+  CAPTIONS
+}
+
+enum MediaStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+  SKIPPED
+}
+
+model MediaAsset {
+  id             String      @id @default(cuid())
+  contentPieceId String
+  kind           MediaKind
+  status         MediaStatus @default(PENDING)
+
+  /// Prompt enviado ao gerador — auditoria e reprodutibilidade.
+  prompt      String?
+  provider    String?
+  model       String?
+  storageKey  String?
+  externalUrl String?
+  durationSec Int?
+  /// Texto de narração/legenda quando `kind` é AUDIO ou CAPTIONS.
+  text        String?
+  meta        Json?
+
+  /// `true` quando o arquivo foi produzido por um provider simulado. A
+  /// interface é obrigada a rotular — jamais exibir mock como entregável.
+  isMock       Boolean @default(false)
+  costUsd      Float   @default(0)
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contentPiece ContentPiece @relation(fields: [contentPieceId], references: [id], onDelete: Cascade)
+
+  @@index([contentPieceId, kind])
+  @@map("growth_media_assets")
+}
+
+// -----------------------------------------------------------------------------
+// Agente 4 — Publicação e métricas
+// -----------------------------------------------------------------------------
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+}
+
+enum AccountStatus {
+  CONNECTED
+  TOKEN_EXPIRED
+  DISCONNECTED
+  MOCK
+}
+
+model SocialAccount {
+  id          String         @id @default(cuid())
+  workspaceId String
+  platform    SocialPlatform
+  /// ID da conta na plataforma (IG User ID ou Page ID).
+  externalId  String
+  username    String?
+  displayName String?
+  /// Página do Facebook vinculada — o Instagram Graph API publica através dela.
+  pageId      String?
+
+  /// Nome da variável de ambiente/secret que guarda o token. O token **nunca**
+  /// é gravado em texto claro nesta tabela.
+  tokenRef       String?
+  tokenExpiresAt DateTime?
+  scopes         Json?
+  status         AccountStatus @default(MOCK)
+  lastCheckedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publications Publication[]
+  contacts     Contact[]
+
+  @@unique([workspaceId, platform, externalId])
+  @@index([workspaceId, status])
+  @@map("growth_social_accounts")
+}
+
+enum PublicationStatus {
+  QUEUED
+  PENDING_APPROVAL
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+model Publication {
+  id              String            @id @default(cuid())
+  workspaceId     String
+  contentPieceId  String
+  socialAccountId String
+  platform        SocialPlatform
+  status          PublicationStatus @default(QUEUED)
+
+  scheduledFor   DateTime?
+  publishedAt    DateTime?
+  externalPostId String?
+  permalink      String?
+  attempts       Int       @default(0)
+  errorMessage   String?
+  isMock         Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentPiece  ContentPiece    @relation(fields: [contentPieceId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount   @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  metrics       ContentMetric[]
+  conversations Conversation[]
+
+  @@unique([contentPieceId, socialAccountId])
+  @@index([workspaceId, status, scheduledFor])
+  @@map("growth_publications")
+}
+
+/// Snapshot de métricas. Uma linha por coleta (T+1h, T+24h, T+7d) para permitir
+/// olhar a curva, não só o número final.
+model ContentMetric {
+  id            String   @id @default(cuid())
+  publicationId String
+  capturedAt    DateTime @default(now())
+
+  impressions   Int @default(0)
+  reach         Int @default(0)
+  likes         Int @default(0)
+  comments      Int @default(0)
+  shares        Int @default(0)
+  saves         Int @default(0)
+  videoViews    Int @default(0)
+  linkClicks    Int @default(0)
+  profileVisits Int @default(0)
+
+  /// Resposta bruta da plataforma, para reprocessar sem nova chamada.
+  raw    Json?
+  isMock Boolean @default(false)
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId, capturedAt])
+  @@map("growth_content_metrics")
+}
+
+// -----------------------------------------------------------------------------
+// CRM — contatos, conversas, leads e vendas
+// -----------------------------------------------------------------------------
+
+/// Quem interagiu com a marca. Separado de `Lead` de propósito: comentar uma
+/// vez não faz de ninguém um lead, e misturar os dois destrói a taxa de
+/// conversão como métrica.
+model Contact {
+  id              String         @id @default(cuid())
+  workspaceId     String
+  platform        SocialPlatform
+  /// IGSID / PSID do usuário na plataforma.
+  externalId      String
+  socialAccountId String?
+
+  username  String?
+  name      String?
+  avatarUrl String?
+
+  firstSeenAt       DateTime  @default(now())
+  lastInteractionAt DateTime  @default(now())
+  /// Pediu para parar de receber mensagens. Nenhum modo de operação ignora.
+  optOut            Boolean   @default(false)
+  optOutAt          DateTime?
+  notes             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  conversations Conversation[]
+  lead          Lead?
+
+  @@unique([workspaceId, platform, externalId])
+  @@index([workspaceId, lastInteractionAt])
+  @@map("growth_contacts")
+}
+
+enum ConversationChannel {
+  IG_DM
+  IG_COMMENT
+  FB_MESSENGER
+  FB_COMMENT
+}
+
+enum ConversationStatus {
+  OPEN
+  WAITING_CUSTOMER
+  WAITING_HUMAN
+  HUMAN_HANDLED
+  CLOSED
+}
+
+model Conversation {
+  id          String              @id @default(cuid())
+  workspaceId String
+  contactId   String
+  channel     ConversationChannel
+  status      ConversationStatus  @default(OPEN)
+
+  /// Última mensagem **recebida**. É o relógio da janela de 24h da Meta:
+  /// fora dela, nenhuma mensagem pode sair.
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+
+  assignedToId String?
+  /// Resumo mantido pelo agente para não reenviar o histórico inteiro ao
+  /// modelo a cada troca (controle de custo).
+  summary      String?
+  nextAction   String?
+  nextActionAt DateTime?
+
+  /// De onde veio esta conversa — liga receita a conteúdo (item 16).
+  sourceContentPieceId String?
+  sourcePublicationId  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact            Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedTo         User?          @relation("ConversationAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  sourceContentPiece ContentPiece?  @relation(fields: [sourceContentPieceId], references: [id], onDelete: SetNull)
+  sourcePublication  Publication?   @relation(fields: [sourcePublicationId], references: [id], onDelete: SetNull)
+  messages           Message[]
+  leads              Lead[]
+  followUps          FollowUpTask[]
+
+  @@index([workspaceId, status, updatedAt])
+  @@index([contactId])
+  @@map("growth_conversations")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  RECEIVED
+  DRAFT
+  PENDING_APPROVAL
+  QUEUED
+  SENT
+  FAILED
+  REJECTED
+  BLOCKED
+}
+
+/// A mensagem existe no banco **antes** de ser enviada. É isso que torna o
+/// modo manual possível sem duplicar o caminho de código: aprovar é mudar o
+/// status de PENDING_APPROVAL para QUEUED.
+model Message {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  direction      MessageDirection
+  status         MessageStatus
+
+  text       String
+  /// ID da mensagem/comentário na plataforma. Único por workspace para tornar
+  /// o processamento de webhook idempotente.
+  externalId String?
+
+  agent        String?
+  provider     String?
+  model        String?
+  inputTokens  Int     @default(0)
+  outputTokens Int     @default(0)
+  costUsd      Float   @default(0)
+
+  /// Motivo de BLOCKED/REJECTED — ex.: "fora da janela de 24h".
+  blockedReason String?
+  sentAt        DateTime?
+  receivedAt    DateTime?
+  meta          Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  followUps    FollowUpTask[]
+
+  @@unique([workspaceId, externalId])
+  @@index([conversationId, createdAt])
+  @@index([workspaceId, status])
+  @@map("growth_messages")
+}
+
+enum LeadTemperature {
+  COLD
+  WARM
+  HOT
+  READY
+}
+
+model Lead {
+  id             String          @id @default(cuid())
+  workspaceId    String
+  contactId      String          @unique
+  conversationId String?
+  temperature    LeadTemperature @default(COLD)
+  /// 0..100 — composto por intenção, urgência e estágio de decisão.
+  score          Int             @default(0)
+
+  intent        String?
+  problem       String?
+  productId     String?
+  budget        String?
+  urgency       String?
+  decisionStage String?
+  objections    Json        @default("[]")
+  funnelStage   FunnelStage @default(AWARENESS)
+
+  qualifiedAt          DateTime?
+  sourceContentPieceId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace          Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact            Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversation       Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  product            Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sourceContentPiece ContentPiece?  @relation(fields: [sourceContentPieceId], references: [id], onDelete: SetNull)
+  deals              Deal[]
+  followUps          FollowUpTask[]
+
+  @@index([workspaceId, temperature, updatedAt])
+  @@map("growth_leads")
+}
+
+enum DealStage {
+  NEW
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CHECKOUT_SENT
+  WON
+  LOST
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+model Deal {
+  id          String     @id @default(cuid())
+  workspaceId String
+  leadId      String
+  productId   String?
+  stage       DealStage  @default(NEW)
+  status      DealStatus @default(OPEN)
+
+  valueCents  Int?
+  currency    String    @default("BRL")
+  checkoutUrl String?
+  closedAt    DateTime?
+  lostReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, stage])
+  @@map("growth_deals")
+}
+
+enum FollowUpStatus {
+  PENDING
+  SENT
+  CANCELLED
+  SKIPPED
+  FAILED
+}
+
+/// Follow-up é tarefa agendada, não laço de repetição: cada tentativa tem
+/// motivo, horário e teto. `attempt`/`maxAttempts` é o que impede o sistema de
+/// virar spam quando ninguém responde.
+model FollowUpTask {
+  id             String         @id @default(cuid())
+  workspaceId    String
+  leadId         String
+  conversationId String
+  reason         String
+  attempt        Int            @default(1)
+  maxAttempts    Int            @default(3)
+  scheduledFor   DateTime
+  status         FollowUpStatus @default(PENDING)
+
+  draft           String?
+  sentMessageId   String?
+  cancelledReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentMessage  Message?     @relation(fields: [sentMessageId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, scheduledFor])
+  @@map("growth_follow_up_tasks")
+}
+
+// -----------------------------------------------------------------------------
+// Operação — aprovações, fila, webhooks, telemetria
+// -----------------------------------------------------------------------------
+
+enum ActionType {
+  STRATEGY_GENERATE
+  CONTENT_GENERATE
+  MEDIA_GENERATE
+  CONTENT_PUBLISH
+  COMMENT_REPLY
+  DM_SEND
+  FOLLOW_UP_SEND
+  CHECKOUT_LINK_SEND
+  HUMAN_HANDOFF
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model ApprovalRequest {
+  id          String         @id @default(cuid())
+  workspaceId String
+  actionType  ActionType
+  riskLevel   RiskLevel
+  status      ApprovalStatus @default(PENDING)
+
+  entityType String
+  entityId   String
+  title      String
+  /// O que será executado se aprovado — texto da DM, dados da publicação.
+  payload    Json
+
+  requestedByAgent String?
+  decidedById      String?
+  decidedAt        DateTime?
+  notes            String?
+  expiresAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  decidedBy User?     @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([entityType, entityId])
+  @@map("growth_approval_requests")
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  DEAD
+}
+
+/// Fila persistida em Postgres.
+///
+/// Escolha deliberada para o MVP: `SELECT ... FOR UPDATE SKIP LOCKED` entrega
+/// concorrência segura sem Redis, e o job fica na mesma transação do dado que
+/// ele produz. Migra para BullMQ/Redis quando o volume justificar — os
+/// handlers não mudam.
+model GrowthJob {
+  id          String    @id @default(cuid())
+  workspaceId String?
+  type        String
+  payload     Json      @default("{}")
+  status      JobStatus @default(QUEUED)
+
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  result      Json?
+
+  /// Chave de deduplicação. Webhook reenviado não pode gerar duas respostas
+  /// para a mesma pessoa.
+  dedupeKey String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([workspaceId, type, status])
+  @@map("growth_jobs")
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+/// Toda entrega de webhook é gravada antes de ser processada. É o registro que
+/// permite reprocessar sem pedir reenvio à Meta e provar o que chegou.
+model WebhookEvent {
+  id             String         @id @default(cuid())
+  platform       SocialPlatform
+  /// Identificador do evento na origem — chave de idempotência.
+  externalId     String         @unique
+  topic          String
+  signatureValid Boolean        @default(false)
+  payload        Json
+  status         WebhookStatus  @default(RECEIVED)
+  processedAt    DateTime?
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@map("growth_webhook_events")
+}
+
+enum AgentKind {
+  MARKET_STRATEGIST
+  CONTENT_STRATEGIST
+  VIDEO_CREATOR
+  SOCIAL_MANAGER
+  LEAD_QUALIFIER
+  SALES_REP
+  LEARNING_ANALYST
+}
+
+enum AgentRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+/// Uma execução de agente. Junto com `ai_usage_logs`, é o que responde
+/// "quanto custa operar este workspace" — por agente, não só no total.
+model AgentRun {
+  id          String         @id @default(cuid())
+  workspaceId String
+  agent       AgentKind
+  status      AgentRunStatus @default(RUNNING)
+
+  promptName    String?
+  promptVersion String?
+  provider      String?
+  model         String?
+
+  inputTokens      Int   @default(0)
+  outputTokens     Int   @default(0)
+  estimatedCostUsd Float @default(0)
+  latencyMs        Int?
+
+  input        Json?
+  output       Json?
+  errorCode    String?
+  errorMessage String?
+  jobId        String?
+
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, agent, createdAt])
+  @@map("growth_agent_runs")
+}
+
+enum InsightDimension {
+  THEME
+  HOOK
+  CTA
+  FORMAT
+  AUDIENCE
+  FUNNEL_STAGE
+  OBJECTION
+}
+
+/// Padrão detectado pelo módulo de aprendizado, com evidência e tamanho de
+/// amostra. `confidence` baixa com amostra pequena é o que impede o sistema de
+/// "aprender" com três posts.
+model LearningInsight {
+  id          String           @id @default(cuid())
+  workspaceId String
+  dimension   InsightDimension
+  /// O sujeito do padrão: o tema, o gancho, o CTA analisado.
+  subject     String
+  metric      String
+  value       Float
+  sampleSize  Int
+  confidence  Float
+
+  statement      String
+  recommendation String
+  evidence       Json?
+
+  periodStart DateTime
+  periodEnd   DateTime
+  appliedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, dimension, createdAt])
+  @@map("growth_learning_insights")
+}
+
+enum ActorType {
+  AGENT
+  HUMAN
+  SYSTEM
+}
+
+/// Rastro de toda ação com efeito externo: quem fez, em que modo, sobre o quê.
+model AuditLog {
+  id          String       @id @default(cuid())
+  workspaceId String
+  actorType   ActorType
+  actor       String
+  action      String
+  entityType  String
+  entityId    String
+  mode        ApprovalMode
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@map("growth_audit_logs")
 }

@@ -6,6 +6,8 @@
  */
 export interface AIUsageEntry {
   analysisId?: string;
+  /** Preenchido pelas operações do Growth Engine. */
+  workspaceId?: string;
   provider: string;
   model: string;
   /** Ex.: "photo-analysis", "recommendations". */

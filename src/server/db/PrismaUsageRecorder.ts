@@ -25,6 +25,7 @@ export class PrismaUsageRecorder implements AIUsageRecorder {
       await this.db.aIUsageLog.create({
         data: {
           analysisId: entry.analysisId ?? null,
+          workspaceId: entry.workspaceId ?? null,
           provider: entry.provider,
           model: entry.model,
           operation: entry.operation,

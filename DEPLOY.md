@@ -68,3 +68,61 @@ configure `MODEL_PRICING_JSON` antes de expor a aplicação a terceiros.
 O `docker-compose.yml` na raiz sobe o Postgres de desenvolvimento. Para
 produção em VPS, use `npm run build && npm start` atrás de um proxy reverso,
 com as mesmas variáveis de ambiente acima.
+
+---
+
+## Growth Engine em produção
+
+O módulo de marketing e vendas tem três exigências extras.
+
+### 1. O worker precisa rodar
+
+A fila (`growth_jobs`) só anda quando alguém chama um ciclo do worker. Em
+serverless não existe processo longo, então use um cron apontando para o
+endpoint:
+
+`vercel.json`:
+
+```json
+{ "crons": [{ "path": "/api/growth/worker/tick", "schedule": "* * * * *" }] }
+```
+
+O endpoint aceita `x-cron-secret: $CRON_SECRET` ou uma sessão autenticada.
+Configure `CRON_SECRET` — sem ele, qualquer um na internet pode disparar a
+fila da sua conta.
+
+Em VPS, o mesmo ciclo roda em processo dedicado chamando
+`runGrowthWorkerTick()` em laço; é o caminho recomendado quando a geração de
+vídeo entrar, porque essas chamadas passam de dez segundos.
+
+### 2. Webhook e credenciais da Meta
+
+| Variável | Para quê |
+|---|---|
+| `SOCIAL_PROVIDER=META` | sai do modo simulado |
+| `META_APP_SECRET` | valida a assinatura do webhook (sem ela, tudo é recusado) |
+| `META_VERIFY_TOKEN` | eco na verificação inicial do webhook |
+| `META_TOKEN_<CONTA>` | token de longa duração, referenciado por nome no painel |
+
+Webhook a cadastrar no app da Meta:
+`https://SEU_DOMINIO/api/growth/webhooks/meta`, tópicos `messages`,
+`comments` e `feed`.
+
+Antes disso é preciso ter, e não é código: conta Instagram Business vinculada
+a uma Página, negócio verificado e App Review aprovado para publicação,
+comentários e mensagens — são permissões distintas, revisadas separadamente.
+
+### 3. Mídia acessível publicamente
+
+Na hora de publicar, **a Meta baixa o arquivo do seu servidor** por URL
+(`/api/growth/media/<chave>`). Com `STORAGE_PROVIDER=LOCAL`, o arquivo vive no
+disco da instância — o que não funciona em serverless, onde a instância que
+gerou a mídia não é a que atende o download. Antes de publicar de verdade,
+implemente o `StorageProvider` para S3/R2/Vercel Blob.
+
+### Primeira semana no ar
+
+Deixe o workspace em **modo manual** e leia o que os agentes escreveram antes
+de aprovar. O custo de um mês de conteúdo ruim é pequeno; o de uma DM errada
+para um cliente, não. Suba para semiautomático quando as respostas estiverem
+consistentes, e para autônomo só depois de ver o funil completo funcionando.

@@ -16,7 +16,15 @@ export type PromptName =
   | 'airbnb-analysis'
   | 'booking-analysis'
   | 'pricing-analysis'
-  | 'recommendations';
+  | 'recommendations'
+  // Growth Engine — um prompt por agente, versionado igual aos demais.
+  | 'growth/market-strategy'
+  | 'growth/content-plan'
+  | 'growth/video-brief'
+  | 'growth/lead-qualification'
+  | 'growth/sales-reply'
+  | 'growth/follow-up'
+  | 'growth/learning-insights';
 
 /** Versão ativa de cada prompt. Subir aqui invalida o cache daquela função. */
 export const ACTIVE_PROMPT_VERSIONS: Record<PromptName, string> = {
@@ -27,6 +35,13 @@ export const ACTIVE_PROMPT_VERSIONS: Record<PromptName, string> = {
   'booking-analysis': 'v2',
   'pricing-analysis': 'v1',
   'recommendations': 'v1',
+  'growth/market-strategy': 'v1',
+  'growth/content-plan': 'v1',
+  'growth/video-brief': 'v1',
+  'growth/lead-qualification': 'v1',
+  'growth/sales-reply': 'v1',
+  'growth/follow-up': 'v1',
+  'growth/learning-insights': 'v1',
 };
 
 const PROMPTS_DIR = join(process.cwd(), 'prompts');

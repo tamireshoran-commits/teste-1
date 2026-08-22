@@ -1,5 +1,8 @@
 import NextAuth from 'next-auth';
 import { authConfig } from './config';
+import { UnauthorizedError } from './errors';
+
+export { UnauthorizedError } from './errors';
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
 
@@ -16,13 +19,4 @@ export async function requireUserId(): Promise<string> {
   }
 
   return userId;
-}
-
-export class UnauthorizedError extends Error {
-  readonly status = 401;
-
-  constructor(message = 'Não autenticado') {
-    super(message);
-    this.name = 'UnauthorizedError';
-  }
 }

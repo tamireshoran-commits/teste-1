@@ -35,6 +35,23 @@ export default async function HomePage() {
         </ul>
       </section>
 
+      <section className="rounded-xl border border-ink-100 bg-white p-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">
+          Growth Engine
+        </h2>
+        <p className="mt-3 text-sm text-ink-700">
+          Marketing e vendas operados por agentes de IA: pesquisa de mercado,
+          calendário de conteúdo, publicação no Instagram/Facebook, qualificação
+          de leads e vendas por conversa — com aprovação humana no meio.
+        </p>
+        <Link
+          href="/growth"
+          className="mt-4 inline-block text-sm font-medium text-brand-500 hover:text-brand-600"
+        >
+          Abrir o painel →
+        </Link>
+      </section>
+
       <div className="flex gap-3">
         {session?.user ? (
           <span className="text-sm text-ink-700">

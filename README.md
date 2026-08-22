@@ -9,6 +9,18 @@ impacto.
 > (Airbnb/Booking) estão funcionais de ponta a ponta. Faltam o motor de
 > recomendações, o dashboard e o relatório — ver [Roadmap](#roadmap).
 
+### Dois módulos neste repositório
+
+| Módulo | O que faz | Onde |
+|---|---|---|
+| **StayScore** | Análise de competitividade de anúncios de temporada | `src/server/core/`, `/analises` |
+| **Growth Engine** | Marketing e vendas por agentes de IA (Instagram/Facebook) | `src/server/growth/`, `/growth` |
+
+Compartilham banco, autenticação, fila de conceitos (providers, prompts
+versionados, custo de IA) e infraestrutura de testes; o domínio de cada um é
+independente. Ver [Growth Engine](#growth-engine--marketing-e-vendas-por-agentes)
+e o [documento de arquitetura](docs/growth/ARQUITETURA.md).
+
 ---
 
 ## Stack
@@ -328,3 +340,139 @@ npm run test:live   # banco real + APIs externas (pula o que não tem credencial
 
 O pipeline por etapas com retry granular (`AnalysisStep`) já existe no schema
 e passa a ser exercitado quando a UI de análise entrar, na Etapa 6.
+
+
+---
+
+## Growth Engine — marketing e vendas por agentes
+
+Sistema autônomo que pesquisa mercado, cria conteúdo, publica no
+Instagram/Facebook, conversa com quem interage, qualifica leads, vende e
+aprende com o resultado. A arquitetura completa, com comparação de
+tecnologias, fluxo de dados e fases, está em
+[`docs/growth/ARQUITETURA.md`](docs/growth/ARQUITETURA.md).
+
+### Os seis agentes
+
+| Agente | Responsabilidade | Modelo | Saída |
+|---|---|---|---|
+| 1 · Estrategista de Mercado | Persona, dores, desejos, objeções, concorrentes, oferta | caro | `growth_market_strategies` |
+| 2 · Estrategista de Conteúdo | Calendário, pilares, ganchos, roteiros, CTAs | caro | `growth_content_pieces` |
+| 3 · Criador de Vídeos | Briefing cena a cena, narração, legendas, thumbnail | barato | `growth_media_assets` |
+| 4 · Gerenciador de Redes | Fila de publicação, agendamento, cota, métricas | — | `growth_publications` |
+| 5 · Qualificador de Leads | Intenção, dor, urgência, temperatura (frio → pronto) | barato | `growth_leads` |
+| 6 · Vendedor por IA | Conversa, objeções, checkout, follow-up | caro | `growth_messages` |
+
+Um sétimo módulo (aprendizado) fecha o laço: métricas → padrões →
+instrução para o Agente 2 no próximo calendário.
+
+### Como rodar sem nenhuma credencial
+
+```bash
+npm run db:migrate && npm run db:seed
+npm run dev
+# abra /growth  (login: dev@stayscore.local / stayscore123)
+```
+
+Com os padrões do `.env.example`, **nada sai para a internet**: o modelo, as
+redes sociais e a geração de mídia são simulados, e todo resultado vem
+marcado como `[EXEMPLO]` / `isMock: true`. O ciclo completo é exercitável:
+
+1. **Configurações** → cadastre marca, produto e conecte uma conta simulada;
+2. **Configurações → Estratégia** → rode o estrategista de mercado;
+3. **Painel → Processar fila agora** → o worker executa os jobs;
+4. **Conteúdo** → gere o calendário, aprove uma peça;
+5. **Processar fila** → mídia gerada, publicação criada, aprovada e publicada;
+6. **Configurações → Simular interação** → chega uma "mensagem";
+7. **Processar fila** → lead qualificado e resposta redigida;
+8. **Conteúdo → Aprovações** → aprove o envio;
+9. **Vendas** → funil, follow-up agendado e aprendizado.
+
+### Modos de operação
+
+| Ação | Risco | Manual | Semiautomático | Autônomo |
+|---|---|---|---|---|
+| Gerar estratégia/conteúdo | baixo | executa | executa | executa |
+| Gerar mídia (custo de API) | médio | aprova | executa | executa |
+| Responder comentário | médio | aprova | executa | executa |
+| Publicar | alto | aprova | aprova | executa |
+| Enviar DM / follow-up / checkout | alto | aprova | aprova | executa |
+
+O padrão é **manual**. Modo nenhum desliga os guardrails: janela de resposta
+da plataforma, opt-out, limite de mensagens por contato, horário silencioso,
+cota diária de publicações e a checagem de texto (nada de promessa de
+resultado, preço inventado ou link não cadastrado).
+
+### O que o sistema deliberadamente não faz
+
+- **Não inicia DM com quem nunca falou com a conta.** Não existe API oficial
+  para prospecção fria; a alternativa seria automação de navegador, que viola
+  os Termos e custa a conta. O caminho implementado é o legítimo: comentário →
+  resposta → conversa.
+- **Não responde fora da janela de 24h.** Passado esse prazo, a conversa vai
+  para atendimento humano em vez de tentar burlar a regra.
+- **Não publica sem conta aprovada.** Sem App Review da Meta, o publicador
+  roda simulado e o conteúdo fica pronto para publicação manual.
+- **Não promete resultado, não inventa preço nem link.** É guardrail
+  determinístico depois do modelo, não instrução de prompt.
+
+### Fila e worker
+
+Jobs ficam em `growth_jobs` (Postgres, `FOR UPDATE SKIP LOCKED`) com retry,
+backoff exponencial, deduplicação e recuperação de job travado. Um ciclo:
+
+```bash
+curl -X POST localhost:3000/api/growth/worker/tick -H "x-cron-secret: $CRON_SECRET"
+```
+
+Em produção, aponte um cron (Vercel Cron, GitHub Actions, systemd timer) para
+esse endpoint a cada minuto, ou rode `runGrowthWorkerTick()` em laço num
+processo dedicado.
+
+### Integração real com a Meta
+
+Para sair do modo simulado é preciso, **fora do código**: conta Instagram
+Business vinculada a uma Página, app com App Review aprovado (publicação,
+comentários e mensagens são permissões distintas) e token de longa duração.
+Depois:
+
+```bash
+SOCIAL_PROVIDER="META"
+META_APP_SECRET="..."        # valida a assinatura do webhook
+META_VERIFY_TOKEN="..."      # eco na verificação do webhook
+META_TOKEN_MINHA_CONTA="..." # o token em si
+```
+
+No painel, cadastre a conta informando **o nome da variável**
+(`META_TOKEN_MINHA_CONTA`) no campo de token — o token nunca é gravado no
+banco. Webhook: `https://SEU_DOMINIO/api/growth/webhooks/meta`.
+
+### Testes do módulo
+
+| Arquivo | O que garante |
+|---|---|
+| `tests/growth/approvalPolicy.test.ts` | A matriz ação × modo, incluindo sobrescritas |
+| `tests/growth/messagingPolicy.test.ts` | Janela de 24h, opt-out, limite diário, silêncio, duplicidade |
+| `tests/growth/time.test.ts` | Horário local por fuso, silêncio cruzando a meia-noite |
+| `tests/growth/guardrails.test.ts` | Promessa de resultado, preço fora do catálogo, link e dado sensível |
+| `tests/growth/metaWebhook.test.ts` | Assinatura HMAC e normalização de eventos (DM, comentário, feed) |
+| `tests/growth/runAgent.test.ts` | Contrato de saída, cache, registro de custo e falha |
+| `tests/growth/worker.test.ts` | Despacho, isolamento de falha e backoff |
+| `tests/growth/learning.test.ts` | Agregação de desempenho por tema, gancho, CTA e formato |
+| `tests/growth/agentsOutput.test.ts` | Score × temperatura, duração de cenas, link do catálogo |
+| `tests/integration/growthQueue.live.test.ts` | Fila e idempotência contra Postgres real |
+
+### Estado das fases
+
+| Fase | Escopo | Estado |
+|---|---|---|
+| 0 | Arquitetura, comparações, modelo de dados | ✅ |
+| 1 | Schema, fila, políticas, guardrails, multi-tenant | ✅ |
+| 2 | Agentes 1 e 2 (mercado e conteúdo) | ✅ |
+| 3 | Agente 3 e providers de mídia | ✅ |
+| 4 | Agente 4: publicação e métricas | ✅ |
+| 5 | Webhooks, agentes 5 e 6, CRM, follow-up | ✅ |
+| 6 | Aprendizado e realimentação | ✅ |
+| 7 | Painel administrativo | ✅ |
+| 8 | Produção: App Review, tokens, worker dedicado | ⏳ operação |
+| 9 | SaaS: billing, onboarding, limites por plano | ⏳ futuro |

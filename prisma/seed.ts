@@ -54,7 +54,78 @@ async function main() {
     });
 
     console.log(`Usuário de desenvolvimento: ${user.email} / stayscore123`);
+
+    await seedGrowthWorkspace(user.id);
   }
+}
+
+/**
+ * Workspace de desenvolvimento do Growth Engine.
+ *
+ * Cria só a estrutura: workspace em modo manual, marca, um produto e uma conta
+ * simulada. **Não cria conteúdo, lead nem venda fictícios** — dado inventado no
+ * banco vira número inventado no painel e no módulo de aprendizado.
+ */
+async function seedGrowthWorkspace(userId: string) {
+  const slug = 'workspace-dev';
+
+  const workspace = await prisma.workspace.upsert({
+    where: { slug },
+    update: {},
+    create: {
+      ownerId: userId,
+      name: 'Workspace de Desenvolvimento',
+      slug,
+      mode: 'MANUAL',
+      members: { create: { userId, role: 'OWNER' } },
+      brandProfile: {
+        create: {
+          name: 'Marca de Desenvolvimento',
+          description: 'Workspace de testes do Growth Engine.',
+          toneOfVoice: 'Direto, próximo e sem jargão.',
+          doNotSay: ['garantia de resultado', 'fórmula secreta'],
+        },
+      },
+    },
+  });
+
+  const productCount = await prisma.product.count({
+    where: { workspaceId: workspace.id },
+  });
+
+  if (productCount === 0) {
+    await prisma.product.create({
+      data: {
+        workspaceId: workspace.id,
+        name: 'Consultoria inicial',
+        description:
+          'Diagnóstico de uma hora com plano de ação escrito, entregue em 48h.',
+        priceCents: 49700,
+        checkoutUrl: 'https://example.invalid/checkout/consultoria',
+        benefits: ['Diagnóstico gravado', 'Plano de ação escrito'],
+      },
+    });
+  }
+
+  await prisma.socialAccount.upsert({
+    where: {
+      workspaceId_platform_externalId: {
+        workspaceId: workspace.id,
+        platform: 'INSTAGRAM',
+        externalId: 'ig-dev-0001',
+      },
+    },
+    update: {},
+    create: {
+      workspaceId: workspace.id,
+      platform: 'INSTAGRAM',
+      externalId: 'ig-dev-0001',
+      username: 'conta.simulada',
+      status: 'MOCK',
+    },
+  });
+
+  console.log(`Workspace do Growth Engine pronto: ${workspace.slug} (modo manual)`);
 }
 
 main()

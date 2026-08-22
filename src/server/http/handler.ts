@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { UnauthorizedError } from '@/server/auth';
+import { UnauthorizedError } from '@/server/auth/errors';
 import { AppError, toAppError } from '@/server/core/shared/errors';
 import { logger } from '@/server/core/shared/logger';
 
