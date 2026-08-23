@@ -181,10 +181,17 @@ OmniRoute, OpenRouter, ou um modelo local — é configuração, não refatoraç
 | Privacidade | contrato claro com um fornecedor | **varia por rota** — vários serviços gratuitos treinam com o que recebem |
 
 A consequência de privacidade é a que importa neste produto: conversa de
-cliente é dado pessoal. A recomendação é usar camada gratuita para o que é
-geração de conteúdo (estratégia, calendário, roteiro) e fornecedor com garantia
-de não-treinamento para o que toca mensagem de pessoa real — que é justamente a
-parte de menor volume, e portanto a mais barata de manter paga.
+cliente é dado pessoal. Por isso o contrato `LLMProvider` tem **três níveis**,
+e não dois: `cheap` e `smart` separam custo de capacidade, e `private` separa
+por sensibilidade — qualificação, resposta de venda e follow-up passam por ele.
+
+Sem esse terceiro nível a escolha seria binária e ruim: pagar por tudo,
+inclusive pelo que não tem dado de ninguém, ou mandar conversa de cliente para
+o fornecedor gratuito da vez. Com ele, o volume pesado (geração de conteúdo)
+pode rodar de graça enquanto o que toca gente real vai para um fornecedor
+escolhido — que é justamente a parte de menor volume, e portanto a mais barata
+de manter paga. `LLM_MODEL_PRIVATE` vazio cai no `smart`, nunca no `cheap`: o
+padrão precisa ser o mais protegido, não o mais econômico.
 
 **Hospedagem**
 

@@ -83,7 +83,8 @@ export async function runSalesRep(
     operation: 'growth:sales-reply',
     prompt: 'growth/sales-reply',
     schema: salesReplySchema,
-    tier: 'smart',
+    // Vê o histórico inteiro da conversa — o dado mais sensível do sistema.
+    tier: 'private',
     temperature: 0.7,
     maxOutputTokens: 1200,
     variables: {

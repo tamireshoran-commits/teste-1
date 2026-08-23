@@ -120,6 +120,7 @@ export function getLLMProvider(
       apiKey,
       cheapModel: env.LLM_MODEL_CHEAP,
       smartModel: env.LLM_MODEL_SMART,
+      privateModel: env.LLM_MODEL_PRIVATE,
     });
   }
 
@@ -178,6 +179,7 @@ function buildOpenAICompatibleProvider(
     apiKey,
     cheapModel: env.LLM_MODEL_CHEAP,
     smartModel: env.LLM_MODEL_SMART,
+    privateModel: env.LLM_MODEL_PRIVATE,
     jsonMode: env.LLM_JSON_MODE,
     label: choice === 'OPENAI' ? 'openai' : 'gateway',
   });

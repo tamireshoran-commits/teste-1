@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { env } from '../src/server/config/env.js';
+import type { ModelTier } from '../src/server/core/providers/ai/llm/LLMProvider.js';
 import { OpenAICompatibleLLMProvider } from '../src/server/core/providers/ai/llm/OpenAICompatibleLLMProvider.js';
 
 /**
@@ -28,6 +29,9 @@ async function main(): Promise<void> {
   console.log(`  LLM_API_KEY      ${apiKey ? 'definida' : '(vazia)'}`);
   console.log(`  LLM_MODEL_CHEAP  ${env.LLM_MODEL_CHEAP}`);
   console.log(`  LLM_MODEL_SMART  ${env.LLM_MODEL_SMART}`);
+  console.log(
+    `  LLM_MODEL_PRIVATE ${env.LLM_MODEL_PRIVATE ?? '(vazio — usa o SMART)'}`,
+  );
   console.log(`  IMAGE_PROVIDER   ${env.IMAGE_PROVIDER}`);
 
   if (env.LLM_PROVIDER !== 'OPENAI_COMPATIBLE' && env.LLM_PROVIDER !== 'OPENAI') {
@@ -52,18 +56,33 @@ async function main(): Promise<void> {
 
   console.log('\n== Teste de geração ==\n');
 
+  const privateModel = env.LLM_MODEL_PRIVATE ?? env.LLM_MODEL_SMART;
+
   const cheap = await testModel('cheap', env.LLM_MODEL_CHEAP, baseUrl, apiKey);
   const smart = await testModel('smart', env.LLM_MODEL_SMART, baseUrl, apiKey);
+  const reserved = await testModel('private', privateModel, baseUrl, apiKey);
 
   console.log('\n== Resultado ==\n');
 
-  if (cheap && smart) {
-    console.log(`${CHECK}  Gateway respondendo nos dois níveis de modelo.`);
-    console.log(
-      '\n   Lembrete de privacidade: o modelo "smart" é o que conversa com\n' +
-        '   cliente e vê dado pessoal. Aponte-o para um fornecedor com\n' +
-        '   garantia de não-treinamento; deixe os gratuitos no "cheap".\n',
-    );
+  if (cheap && smart && reserved) {
+    console.log(`${CHECK}  Gateway respondendo nos três níveis de modelo.`);
+
+    if (env.LLM_MODEL_PRIVATE === undefined) {
+      console.log(
+        `\n${WARN}  LLM_MODEL_PRIVATE está vazio, então as conversas com\n` +
+          '   cliente usam o mesmo modelo do SMART. Se o SMART é um\n' +
+          '   fornecedor gratuito que treina com o que recebe, configure\n' +
+          '   um modelo de confiança aqui — é o nível que lê mensagem de\n' +
+          '   gente real (qualificação, venda e follow-up).\n',
+      );
+    } else {
+      console.log(
+        '\n   Conversas de cliente vão para ' +
+          `"${env.LLM_MODEL_PRIVATE}". Confirme que esse fornecedor não\n` +
+          '   treina com o que recebe.\n',
+      );
+    }
+
     return;
   }
 
@@ -111,16 +130,22 @@ async function listModels(baseUrl: string, apiKey: string): Promise<void> {
     console.log(`  ${ids.length} modelos. Primeiros 40:\n`);
 
     for (const id of ids.slice(0, 40)) {
-      const inUse =
-        id === env.LLM_MODEL_CHEAP || id === env.LLM_MODEL_SMART ? ' <- em uso' : '';
+      const inUse = [
+        env.LLM_MODEL_CHEAP,
+        env.LLM_MODEL_SMART,
+        env.LLM_MODEL_PRIVATE,
+      ].includes(id)
+        ? ' <- em uso'
+        : '';
       console.log(`    ${id}${inUse}`);
     }
 
     for (const [label, model] of [
       ['LLM_MODEL_CHEAP', env.LLM_MODEL_CHEAP],
       ['LLM_MODEL_SMART', env.LLM_MODEL_SMART],
+      ['LLM_MODEL_PRIVATE', env.LLM_MODEL_PRIVATE],
     ] as const) {
-      if (!ids.includes(model)) {
+      if (model !== undefined && !ids.includes(model)) {
         console.log(
           `\n  ${WARN}  ${label}="${model}" não aparece na lista do gateway. ` +
             'Copie um nome exatamente como está acima.',
@@ -137,7 +162,7 @@ async function listModels(baseUrl: string, apiKey: string): Promise<void> {
 
 /** Faz uma geração real e mínima, para provar que o caminho inteiro funciona. */
 async function testModel(
-  tier: 'cheap' | 'smart',
+  tier: ModelTier,
   model: string,
   baseUrl: string,
   apiKey: string,
@@ -147,6 +172,7 @@ async function testModel(
     apiKey: apiKey || 'local',
     cheapModel: env.LLM_MODEL_CHEAP,
     smartModel: env.LLM_MODEL_SMART,
+    privateModel: env.LLM_MODEL_PRIVATE,
     jsonMode: env.LLM_JSON_MODE,
     defaultTimeoutMs: 45_000,
     label: 'gateway',
@@ -177,7 +203,7 @@ async function testModel(
     const tokens = (result.usage.inputTokens ?? 0) + (result.usage.outputTokens ?? 0);
 
     console.log(
-      `  ${CHECK}  ${tier.padEnd(5)} "${model}" respondeu em ${elapsed}s ` +
+      `  ${CHECK}  ${tier.padEnd(7)} "${model}" respondeu em ${elapsed}s ` +
         `(${tokens} tokens, modelo usado: ${result.model})`,
     );
 
@@ -190,7 +216,7 @@ async function testModel(
 
     return true;
   } catch (error) {
-    console.log(`  ${CROSS}  ${tier.padEnd(5)} "${model}" falhou: ${describe(error)}`);
+    console.log(`  ${CROSS}  ${tier.padEnd(7)} "${model}" falhou: ${describe(error)}`);
     console.log(`       ${sugestao(error)}`);
 
     return false;

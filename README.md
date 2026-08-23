@@ -403,10 +403,28 @@ npm install -g omniroute && omniroute      # sobe em http://localhost:20128
 LLM_PROVIDER="OPENAI_COMPATIBLE"
 LLM_BASE_URL="http://localhost:20128/v1"
 LLM_API_KEY="<chave gerada no painel do OmniRoute>"
-LLM_MODEL_CHEAP="<modelo gratuito>"        # qualificação, volume alto
-LLM_MODEL_SMART="<modelo melhor>"          # estratégia e resposta de venda
+LLM_MODEL_CHEAP="<modelo gratuito>"        # classificação e roteiro de vídeo
+LLM_MODEL_SMART="<modelo melhor>"          # estratégia e calendário
+LLM_MODEL_PRIVATE="<modelo de confiança>"  # tudo que lê conversa de cliente
 IMAGE_PROVIDER="OPENAI_COMPATIBLE"         # /v1/images/generations do mesmo gateway
 ```
+
+Os três níveis existem por razões diferentes. `cheap` e `smart` separam custo
+de capacidade; **`private` separa por privacidade**, e é o que torna seguro
+usar fornecedor gratuito no resto:
+
+| Agente | Nível | Lê conversa de cliente? |
+|---|---|---|
+| Estrategista de mercado | `smart` | não |
+| Estrategista de conteúdo | `smart` | não |
+| Criador de vídeos | `cheap` | não |
+| Módulo de aprendizado | `smart` | não (só métricas agregadas) |
+| **Qualificador de leads** | `private` | **sim** |
+| **Vendedor** | `private` | **sim** |
+| **Follow-up** | `private` | **sim** |
+
+`LLM_MODEL_PRIVATE` vazio cai no `smart`, nunca no `cheap`: o padrão de
+fallback é o mais protegido, não o mais barato.
 
 Vale para OpenRouter, Groq, Together, LM Studio e Ollama também — muda a URL e
 o nome do modelo, mais nada.
@@ -425,9 +443,9 @@ dessa configuração, e sem isso ele só aparece quando um cliente escreve.
 Três coisas a considerar antes de mandar conversa de cliente por lá:
 
 - **Privacidade.** Boa parte dos serviços gratuitos treina com o que recebe.
-  Conversa de cliente é dado pessoal, e a LGPD se aplica. Use camada gratuita
-  para geração de conteúdo e um fornecedor com garantia de não-treinamento
-  para o agente de vendas — é a parte de menor volume, e sai por centavos.
+  Conversa de cliente é dado pessoal, e a LGPD se aplica a você, não ao
+  fornecedor. É para isso que serve `LLM_MODEL_PRIVATE`: os três agentes que
+  leem mensagem de gente real passam por ele, e só por ele.
 - **Limite de uso.** Camada gratuita esbarra em cota. O `fallback` do gateway
   cobre parte disso, e a fila daqui retenta com backoff — na prática, uma cota
   estourada atrasa uma resposta em vez de perder o lead.

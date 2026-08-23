@@ -1,6 +1,9 @@
 import type { z } from 'zod';
 import { getPrompt, type PromptName } from '@/server/core/prompts/registry';
-import type { LLMProvider } from '@/server/core/providers/ai/llm/LLMProvider';
+import type {
+  LLMProvider,
+  ModelTier,
+} from '@/server/core/providers/ai/llm/LLMProvider';
 import {
   buildCacheKey,
   sha256,
@@ -71,7 +74,7 @@ export interface RunAgentOptions<T> extends AgentDeps {
   variables: Record<string, string | number | undefined>;
   schema: z.ZodType<T>;
   system?: string;
-  tier?: 'cheap' | 'smart';
+  tier?: ModelTier;
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;

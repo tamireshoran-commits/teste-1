@@ -6,7 +6,12 @@ import {
 } from '@/server/core/shared/errors';
 import { logger } from '@/server/core/shared/logger';
 import { extractJsonObject } from '../vision/photoResponseSchema';
-import type { LLMProvider, LLMRequest, LLMResponse } from './LLMProvider';
+import {
+  modelForTier,
+  type LLMProvider,
+  type LLMRequest,
+  type LLMResponse,
+} from './LLMProvider';
 
 const log = logger.child('openai-compatible');
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -29,6 +34,8 @@ export interface OpenAICompatibleOptions {
   apiKey: string;
   cheapModel: string;
   smartModel: string;
+  /** Modelo para chamadas que veem dado de cliente. Ausente = usa o smart. */
+  privateModel?: string | undefined;
   /**
    * Envia `response_format: json_object`. Nem todo modelo roteado aceita esse
    * campo; quando o endpoint recusa, a requisição é refeita sem ele — os
@@ -56,6 +63,7 @@ export class OpenAICompatibleLLMProvider implements LLMProvider {
   private readonly apiKey: string;
   private readonly cheapModel: string;
   private readonly smartModel: string;
+  private readonly privateModel: string | undefined;
   private readonly jsonMode: boolean;
   private readonly defaultTimeoutMs: number;
   private readonly fetchImpl: typeof fetch;
@@ -66,6 +74,7 @@ export class OpenAICompatibleLLMProvider implements LLMProvider {
     this.apiKey = options.apiKey;
     this.cheapModel = options.cheapModel;
     this.smartModel = options.smartModel;
+    this.privateModel = options.privateModel;
     this.jsonMode = options.jsonMode ?? true;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -76,7 +85,11 @@ export class OpenAICompatibleLLMProvider implements LLMProvider {
   }
 
   async completeJSON<T>(request: LLMRequest<T>): Promise<LLMResponse<T>> {
-    const model = request.tier === 'smart' ? this.smartModel : this.cheapModel;
+    const model = modelForTier(request.tier, {
+      cheap: this.cheapModel,
+      smart: this.smartModel,
+      private: this.privateModel,
+    });
     const timeoutMs = request.timeoutMs ?? this.defaultTimeoutMs;
 
     const messages: Array<{ role: string; content: string }> = [];

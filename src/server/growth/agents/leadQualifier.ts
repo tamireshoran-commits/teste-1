@@ -60,7 +60,8 @@ export async function runLeadQualifier(
     operation: 'growth:lead-qualification',
     prompt: 'growth/lead-qualification',
     schema: leadQualificationSchema,
-    tier: 'cheap',
+    // Lê a mensagem da pessoa: nível reservado ao fornecedor de confiança.
+    tier: 'private',
     temperature: 0.2,
     maxOutputTokens: 1500,
     variables: {

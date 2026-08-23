@@ -76,6 +76,16 @@ const envSchema = z.object({
   VISION_MODEL: z.string().default('gemini-3.5-flash-lite'),
   LLM_MODEL_CHEAP: z.string().default('gemini-3.5-flash-lite'),
   LLM_MODEL_SMART: z.string().default('gemini-3.5-flash'),
+  /**
+   * Modelo das chamadas que veem conversa de cliente: qualificação, resposta
+   * de venda e follow-up. Vazio = usa o `SMART`.
+   *
+   * Existe para quem roteia por um gateway: os fornecedores gratuitos servem
+   * bem para gerar conteúdo, mas vários treinam com o que recebem — e
+   * mensagem de cliente é dado pessoal. Este campo é o que permite usar o
+   * gratuito no volume e um fornecedor de confiança onde há gente real.
+   */
+  LLM_MODEL_PRIVATE: z.string().optional(),
 
   // Fotos analisadas em paralelo. Baixo de propósito: rajada grande dispara
   // rate limit, e o retry sai mais caro que a espera.

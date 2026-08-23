@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { modelForTier } from '@/server/core/providers/ai/llm/LLMProvider';
 import { OpenAICompatibleLLMProvider } from '@/server/core/providers/ai/llm/OpenAICompatibleLLMProvider';
 import {
   InvalidInputError,
@@ -54,7 +55,7 @@ function completion(content: string, model = 'roteado/modelo-x') {
 
 function build(
   fetchImpl: typeof fetch,
-  overrides: Partial<{ jsonMode: boolean }> = {},
+  overrides: Partial<{ jsonMode: boolean; privateModel: string }> = {},
 ) {
   return new OpenAICompatibleLLMProvider({
     baseUrl: 'http://localhost:20128/v1/',
@@ -227,6 +228,32 @@ describe('provider compatível com OpenAI', () => {
     expect(error.message).toMatch(/vazia/);
   });
 
+  it('usa o modelo reservado quando a chamada vê dado de cliente', async () => {
+    const { impl, calls } = fakeFetch([
+      { status: 200, body: completion('{"ok":true}') },
+    ]);
+
+    await build(impl, { privateModel: 'confiavel' }).completeJSON({
+      prompt: 'p',
+      parse,
+      tier: 'private',
+    });
+
+    expect(calls[0]?.body['model']).toBe('confiavel');
+  });
+
+  it('sem modelo reservado configurado, o nível private cai no smart', async () => {
+    const { impl, calls } = fakeFetch([
+      { status: 200, body: completion('{"ok":true}') },
+    ]);
+
+    await build(impl).completeJSON({ prompt: 'p', parse, tier: 'private' });
+
+    // Nunca no barato: o padrão de fallback precisa ser o mais protegido, não
+    // o mais econômico.
+    expect(calls[0]?.body['model']).toBe('caro');
+  });
+
   it('não envia response_format quando o json mode está desligado', async () => {
     const { impl, calls } = fakeFetch([
       { status: 200, body: completion('{"ok":true}') },
@@ -235,5 +262,26 @@ describe('provider compatível com OpenAI', () => {
     await build(impl, { jsonMode: false }).completeJSON({ prompt: 'p', parse });
 
     expect(calls[0]?.body['response_format']).toBeUndefined();
+  });
+});
+
+
+describe('mapeamento de nível para modelo', () => {
+  const models = { cheap: 'barato', smart: 'caro', private: 'confiavel' };
+
+  it('escolhe o modelo de cada nível', () => {
+    expect(modelForTier('cheap', models)).toBe('barato');
+    expect(modelForTier('smart', models)).toBe('caro');
+    expect(modelForTier('private', models)).toBe('confiavel');
+  });
+
+  it('sem nível informado, usa o barato', () => {
+    expect(modelForTier(undefined, models)).toBe('barato');
+  });
+
+  it('private sem configuração cai no smart, nunca no barato', () => {
+    const semPrivate = { cheap: 'barato', smart: 'caro' };
+
+    expect(modelForTier('private', semPrivate)).toBe('caro');
   });
 });

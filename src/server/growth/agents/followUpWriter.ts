@@ -55,7 +55,8 @@ export async function runFollowUpWriter(
     operation: 'growth:follow-up',
     prompt: 'growth/follow-up',
     schema: followUpSchema,
-    tier: 'cheap',
+    // Retoma uma conversa: também enxerga o histórico do cliente.
+    tier: 'private',
     temperature: 0.6,
     maxOutputTokens: 800,
     variables: {

@@ -6,7 +6,12 @@ import {
   TimeoutError,
 } from '@/server/core/shared/errors';
 import { extractJsonObject } from '../vision/photoResponseSchema';
-import type { LLMProvider, LLMRequest, LLMResponse } from './LLMProvider';
+import {
+  modelForTier,
+  type LLMProvider,
+  type LLMRequest,
+  type LLMResponse,
+} from './LLMProvider';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -16,6 +21,8 @@ export interface GeminiLLMProviderOptions {
   cheapModel: string;
   /** Modelo mais capaz, usado só quando a tarefa justifica o custo. */
   smartModel: string;
+  /** Modelo para chamadas que veem dado de cliente. Ausente = usa o smart. */
+  privateModel?: string | undefined;
   defaultTimeoutMs?: number;
   client?: Pick<GoogleGenAI, 'models'>;
 }
@@ -38,12 +45,14 @@ export class GeminiLLMProvider implements LLMProvider {
   private readonly apiKey: string;
   private readonly cheapModel: string;
   private readonly smartModel: string;
+  private readonly privateModel: string | undefined;
   private readonly defaultTimeoutMs: number;
 
   constructor(options: GeminiLLMProviderOptions) {
     this.apiKey = options.apiKey;
     this.cheapModel = options.cheapModel;
     this.smartModel = options.smartModel;
+    this.privateModel = options.privateModel;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.client = options.client ?? new GoogleGenAI({ apiKey: options.apiKey });
   }
@@ -53,7 +62,11 @@ export class GeminiLLMProvider implements LLMProvider {
   }
 
   async completeJSON<T>(request: LLMRequest<T>): Promise<LLMResponse<T>> {
-    const model = request.tier === 'smart' ? this.smartModel : this.cheapModel;
+    const model = modelForTier(request.tier, {
+      cheap: this.cheapModel,
+      smart: this.smartModel,
+      private: this.privateModel,
+    });
     const timeoutMs = request.timeoutMs ?? this.defaultTimeoutMs;
     const abortSignal = AbortSignal.timeout(timeoutMs);
 
