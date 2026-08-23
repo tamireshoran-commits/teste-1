@@ -120,6 +120,26 @@ disco da instância — o que não funciona em serverless, onde a instância que
 gerou a mídia não é a que atende o download. Antes de publicar de verdade,
 implemente o `StorageProvider` para S3/R2/Vercel Blob.
 
+### Alternativa mais barata: tudo em um servidor só
+
+A conta da Vercel é o maior item fixo, e some se a aplicação, o Postgres e um
+gateway de IA (OmniRoute) rodarem juntos em uma VPS pequena — algo em torno de
+US$ 5/mês em vez de US$ 20, sem cobrança por função nem por banco.
+
+O que muda:
+
+- `npm run build && npm start` atrás de um proxy reverso (Caddy ou Nginx), com
+  Postgres na mesma máquina;
+- o worker vira um processo em laço, o que é melhor do que o cron HTTP — sem
+  teto de duração, que é o que trava geração de vídeo em serverless;
+- `STORAGE_PROVIDER=LOCAL` volta a funcionar, porque existe um disco só;
+- o gateway de IA fica acessível em `localhost`, **sem porta aberta para a
+  internet**.
+
+O custo dessa economia é operacional: atualização de sistema, backup do banco
+e monitoramento passam a ser seus. Se ninguém no time vai cuidar disso, os
+US$ 20 da Vercel compram exatamente esse trabalho.
+
 ### Primeira semana no ar
 
 Deixe o workspace em **modo manual** e leia o que os agentes escreveram antes

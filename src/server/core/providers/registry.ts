@@ -4,6 +4,7 @@ import { logger } from '@/server/core/shared/logger';
 import { GeminiLLMProvider } from './ai/llm/GeminiLLMProvider';
 import type { LLMProvider } from './ai/llm/LLMProvider';
 import { MockLLMProvider } from './ai/llm/MockLLMProvider';
+import { OpenAICompatibleLLMProvider } from './ai/llm/OpenAICompatibleLLMProvider';
 import { GeminiVisionProvider } from './ai/vision/GeminiVisionProvider';
 import { MockVisionProvider } from './ai/vision/MockVisionProvider';
 import type { VisionProvider } from './ai/vision/VisionProvider';
@@ -122,12 +123,78 @@ export function getLLMProvider(
     });
   }
 
+  if (choice === 'OPENAI' || choice === 'OPENAI_COMPATIBLE') {
+    return buildOpenAICompatibleProvider(choice);
+  }
+
   log.warn(
     `LLM_PROVIDER=${choice} ainda não tem implementação; ` +
       'a análise qualitativa será pulada.',
   );
 
   return new MockLLMProvider();
+}
+
+/**
+ * Endpoint no dialeto OpenAI: a API oficial, um gateway como o OmniRoute, ou
+ * um modelo rodando na própria máquina.
+ *
+ * A distinção entre `OPENAI` e `OPENAI_COMPATIBLE` é só a URL padrão — o
+ * protocolo é o mesmo, e é por isso que uma classe atende os dois.
+ */
+function buildOpenAICompatibleProvider(
+  choice: 'OPENAI' | 'OPENAI_COMPATIBLE',
+): LLMProvider {
+  const baseUrl =
+    env.LLM_BASE_URL?.trim() ||
+    (choice === 'OPENAI' ? 'https://api.openai.com/v1' : '');
+
+  if (baseUrl === '') {
+    log.warn(
+      'LLM_PROVIDER=OPENAI_COMPATIBLE exige LLM_BASE_URL (ex.: ' +
+        'http://localhost:20128/v1); a análise qualitativa será pulada.',
+    );
+
+    return new MockLLMProvider();
+  }
+
+  const configuredKey = env.LLM_API_KEY?.trim() || env.OPENAI_API_KEY?.trim();
+
+  // Gateway rodando na própria máquina costuma aceitar qualquer credencial.
+  // Exigir chave aí só produziria um fallback para mock difícil de entender.
+  const apiKey = configuredKey || (isLocal(baseUrl) ? 'local' : '');
+
+  if (apiKey === '') {
+    log.warn(
+      `LLM_PROVIDER=${choice} sem LLM_API_KEY nem OPENAI_API_KEY; ` +
+        'a análise qualitativa será pulada.',
+    );
+
+    return new MockLLMProvider();
+  }
+
+  return new OpenAICompatibleLLMProvider({
+    baseUrl,
+    apiKey,
+    cheapModel: env.LLM_MODEL_CHEAP,
+    smartModel: env.LLM_MODEL_SMART,
+    jsonMode: env.LLM_JSON_MODE,
+    label: choice === 'OPENAI' ? 'openai' : 'gateway',
+  });
+}
+
+function isLocal(baseUrl: string): boolean {
+  try {
+    const { hostname } = new URL(baseUrl);
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local')
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

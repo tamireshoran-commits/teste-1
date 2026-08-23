@@ -13,6 +13,7 @@ import {
   ExternalVideoProvider,
 } from './media/ExternalMediaProviders';
 import { GeminiImageProvider } from './media/GeminiImageProvider';
+import { OpenAICompatibleImageProvider } from './media/OpenAICompatibleImageProvider';
 import type {
   ImageProvider,
   SpeechProvider,
@@ -80,6 +81,26 @@ export function getImageProvider(
   choice: typeof env.IMAGE_PROVIDER = env.IMAGE_PROVIDER,
 ): ImageProvider {
   const storage = getStorageProvider();
+
+  if (choice === 'OPENAI_COMPATIBLE') {
+    const baseUrl = env.LLM_BASE_URL?.trim();
+    const apiKey = env.LLM_API_KEY?.trim() || env.OPENAI_API_KEY?.trim() || 'local';
+
+    if (!baseUrl) {
+      log.warn(
+        'IMAGE_PROVIDER=OPENAI_COMPATIBLE exige LLM_BASE_URL; usando o ' +
+          'gerador simulado. As imagens saem marcadas como exemplo.',
+      );
+      return new MockImageProvider(storage);
+    }
+
+    return new OpenAICompatibleImageProvider(storage, {
+      baseUrl,
+      apiKey,
+      model: env.IMAGE_MODEL,
+      label: 'gateway',
+    });
+  }
 
   if (choice === 'GEMINI') {
     const apiKey = env.GEMINI_API_KEY?.trim();

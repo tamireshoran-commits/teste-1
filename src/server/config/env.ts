@@ -36,13 +36,34 @@ const envSchema = z.object({
   VISION_PROVIDER: z
     .enum(['MOCK', 'GEMINI', 'ANTHROPIC', 'OPENAI'])
     .default('MOCK'),
+  /**
+   * OPENAI_COMPATIBLE cobre qualquer endpoint que fale `/v1/chat/completions`:
+   * gateways como o OmniRoute, a própria OpenAI, OpenRouter, Groq, ou um
+   * modelo local. É a opção que permite rotear cada chamada para o fornecedor
+   * mais barato disponível sem tocar em código.
+   */
   LLM_PROVIDER: z
-    .enum(['MOCK', 'GEMINI', 'ANTHROPIC', 'OPENAI'])
+    .enum(['MOCK', 'GEMINI', 'ANTHROPIC', 'OPENAI', 'OPENAI_COMPATIBLE'])
     .default('MOCK'),
 
   GEMINI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+
+  /**
+   * Endereço do endpoint compatível com OpenAI. Ex.: `http://localhost:20128/v1`
+   * (OmniRoute na porta padrão). Vazio com LLM_PROVIDER=OPENAI significa a API
+   * oficial da OpenAI.
+   */
+  LLM_BASE_URL: z.string().url().optional(),
+  /** Chave do endpoint acima. Sem ela, cai para OPENAI_API_KEY. */
+  LLM_API_KEY: z.string().optional(),
+  /**
+   * Pede JSON estruturado via `response_format`. Alguns modelos roteados não
+   * aceitam esse campo; desligue se o gateway reclamar (a requisição já é
+   * refeita sem ele automaticamente, mas desligar evita a ida perdida).
+   */
+  LLM_JSON_MODE: booleanish.default(true),
 
   /**
    * Modelos padrão.
@@ -90,7 +111,9 @@ const envSchema = z.object({
    * `isMock: true` para a interface rotular.
    */
   SOCIAL_PROVIDER: z.enum(['MOCK', 'META']).default('MOCK'),
-  IMAGE_PROVIDER: z.enum(['MOCK', 'GEMINI']).default('MOCK'),
+  IMAGE_PROVIDER: z
+    .enum(['MOCK', 'GEMINI', 'OPENAI_COMPATIBLE'])
+    .default('MOCK'),
   VIDEO_PROVIDER: z.enum(['MOCK', 'EXTERNAL']).default('MOCK'),
   TTS_PROVIDER: z.enum(['MOCK', 'EXTERNAL']).default('MOCK'),
 

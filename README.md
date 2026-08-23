@@ -388,6 +388,42 @@ marcado como `[EXEMPLO]` / `isMock: true`. O ciclo completo é exercitável:
 8. **Conteúdo → Aprovações** → aprove o envio;
 9. **Vendas** → funil, follow-up agendado e aprendizado.
 
+### Rodar com IA de verdade sem pagar por token
+
+O sistema fala com qualquer endpoint no dialeto `/v1/chat/completions`, então
+dá para apontá-lo para um gateway que roteia entre fornecedores — incluindo os
+de camada gratuita. Com o [OmniRoute](https://omniroute.online/) na máquina:
+
+```bash
+npm install -g omniroute && omniroute      # sobe em http://localhost:20128
+```
+
+```bash
+LLM_PROVIDER="OPENAI_COMPATIBLE"
+LLM_BASE_URL="http://localhost:20128/v1"
+LLM_API_KEY="<chave gerada no painel do OmniRoute>"
+LLM_MODEL_CHEAP="<modelo gratuito>"        # qualificação, volume alto
+LLM_MODEL_SMART="<modelo melhor>"          # estratégia e resposta de venda
+IMAGE_PROVIDER="OPENAI_COMPATIBLE"         # /v1/images/generations do mesmo gateway
+```
+
+Vale para OpenRouter, Groq, Together, LM Studio e Ollama também — muda a URL e
+o nome do modelo, mais nada.
+
+Três coisas a considerar antes de mandar conversa de cliente por lá:
+
+- **Privacidade.** Boa parte dos serviços gratuitos treina com o que recebe.
+  Conversa de cliente é dado pessoal, e a LGPD se aplica. Use camada gratuita
+  para geração de conteúdo e um fornecedor com garantia de não-treinamento
+  para o agente de vendas — é a parte de menor volume, e sai por centavos.
+- **Limite de uso.** Camada gratuita esbarra em cota. O `fallback` do gateway
+  cobre parte disso, e a fila daqui retenta com backoff — na prática, uma cota
+  estourada atrasa uma resposta em vez de perder o lead.
+- **O gateway precisa morar em algum lugar.** Ele é local por natureza; uma
+  aplicação hospedada em serverless não alcança o `localhost` da sua máquina.
+  Ou tudo roda no mesmo servidor, ou o gateway fica em uma máquina que a
+  aplicação enxergue — nunca exposto à internet aberta.
+
 ### Modos de operação
 
 | Ação | Risco | Manual | Semiautomático | Autônomo |
@@ -460,6 +496,7 @@ banco. Webhook: `https://SEU_DOMINIO/api/growth/webhooks/meta`.
 | `tests/growth/worker.test.ts` | Despacho, isolamento de falha e backoff |
 | `tests/growth/learning.test.ts` | Agregação de desempenho por tema, gancho, CTA e formato |
 | `tests/growth/agentsOutput.test.ts` | Score × temperatura, duração de cenas, link do catálogo |
+| `tests/llm/OpenAICompatibleLLMProvider.test.ts` | Gateway: modelo por tier, json mode, limites e erros traduzidos |
 | `tests/integration/growthQueue.live.test.ts` | Fila e idempotência contra Postgres real |
 
 ### Estado das fases

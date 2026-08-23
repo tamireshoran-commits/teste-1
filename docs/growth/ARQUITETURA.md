@@ -167,6 +167,25 @@ direta por HTTP.
 O ponto que importa mais que a escolha do fornecedor: **`tier: 'cheap' | 'smart'`
 é decisão do chamador**, e todo consumo cai em `ai_usage_logs` com tokens reais.
 
+**Gateway de IA (opcional, e a maior alavanca de custo).** Como todo o domínio
+fala com a interface `LLMProvider`, apontar o sistema para um roteador —
+OmniRoute, OpenRouter, ou um modelo local — é configuração, não refatoração. O
+`OpenAICompatibleLLMProvider` cobre qualquer endpoint no dialeto
+`/v1/chat/completions`, e o mesmo vale para imagem em `/v1/images/generations`.
+
+| Critério | API direta do fornecedor | Gateway roteando fornecedores |
+|---|---|---|
+| Custo | preço de tabela por token | pode cair a zero usando camadas gratuitas |
+| Disponibilidade | cota de um fornecedor só | fallback automático entre vários |
+| Operação | nada a manter | mais um processo para hospedar e proteger |
+| Privacidade | contrato claro com um fornecedor | **varia por rota** — vários serviços gratuitos treinam com o que recebem |
+
+A consequência de privacidade é a que importa neste produto: conversa de
+cliente é dado pessoal. A recomendação é usar camada gratuita para o que é
+geração de conteúdo (estratégia, calendário, roteiro) e fornecedor com garantia
+de não-treinamento para o que toca mensagem de pessoa real — que é justamente a
+parte de menor volume, e portanto a mais barata de manter paga.
+
 **Hospedagem**
 
 | Opção | Prós | Contras |
