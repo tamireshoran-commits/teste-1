@@ -67,6 +67,7 @@ O seed cria a configuração de scoring `v1` e, fora de produção, o usuário
 | `npm run db:migrate` | Cria e aplica migrations |
 | `npm run db:seed` | Popula configuração de scoring e usuário dev |
 | `npm run db:studio` | Prisma Studio |
+| `npm run growth:gateway` | Confere a conexão com o gateway de IA (modelos, chave, latência) |
 
 ---
 
@@ -409,6 +410,17 @@ IMAGE_PROVIDER="OPENAI_COMPATIBLE"         # /v1/images/generations do mesmo gat
 
 Vale para OpenRouter, Groq, Together, LM Studio e Ollama também — muda a URL e
 o nome do modelo, mais nada.
+
+Antes de mandar conversa de cliente por lá, confira a configuração:
+
+```bash
+npm run growth:gateway
+```
+
+O comando lista os modelos que o **seu** gateway conhece, avisa se o nome
+configurado não está entre eles e faz uma geração real em cada nível (`cheap`
+e `smart`), medindo tempo e tokens. Nome de modelo errado é o erro mais comum
+dessa configuração, e sem isso ele só aparece quando um cliente escreve.
 
 Três coisas a considerar antes de mandar conversa de cliente por lá:
 

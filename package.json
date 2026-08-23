@@ -18,7 +18,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "growth:gateway": "tsx scripts/gateway-check.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
